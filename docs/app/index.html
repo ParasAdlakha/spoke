@@ -3,135 +3,237 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Spoke · live Citi Bike, checked before it's trusted</title>
+<title>Spoke — live Citi Bike, checked before it's trusted</title>
 <meta name="description" content="Live NYC Citi Bike availability on Supabase. Every answer is gated on a data-trust check.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23111' stroke-width='3'/%3E%3Cpath d='M7 7l18 18M25 7L7 25' stroke='%23111' stroke-width='3'/%3E%3C/svg%3E">
 <style>
   :root {
-    --ink: #10203a; --muted: #5b6b82; --line: #e3e8ef; --bg: #f6f8fb; --card: #fff;
-    --brand: #1452e0; --ok: #0f9d58; --warn: #e8a317; --bad: #d93025; --soft: #eef3ff;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --paper: #f1f1ec; --paper-2: #e8e8e1; --card: #fbfbf8; --ink: #111111; --ink-2: #3b3b38; --muted: #7b7b74;
+    --line: #d7d7cf; --accent: #e4ff5c; --ok: #14a35a; --warn: #e3a008; --bad: #e5484d; --off: #a8a8a0;
+    --display: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); }
-  header { display: flex; align-items: center; gap: 14px; padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
-  .logo { width: 30px; height: 30px; border-radius: 50%; border: 3px solid var(--brand); position: relative; }
-  .logo::before, .logo::after { content: ""; position: absolute; left: 50%; top: 50%; width: 22px; height: 2px; background: var(--brand); transform: translate(-50%, -50%) rotate(45deg); }
-  .logo::after { transform: translate(-50%, -50%) rotate(-45deg); }
-  h1 { font-size: 18px; margin: 0; letter-spacing: -.01em; }
-  header .tag { color: var(--muted); font-size: 13px; }
-  header .spacer { flex: 1; }
-  .fresh { font-size: 13px; padding: 6px 10px; border-radius: 999px; background: var(--soft); color: var(--brand); font-variant-numeric: tabular-nums; }
-  .fresh.stale { background: #fdecea; color: var(--bad); }
-  nav button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--card); padding: 6px 12px; border-radius: 8px; cursor: pointer; color: var(--ink); }
-  nav button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-  main { display: grid; grid-template-columns: 1fr 420px; height: calc(100vh - 57px); }
-  #map { height: 100%; }
-  aside { overflow-y: auto; padding: 16px; border-left: 1px solid var(--line); background: var(--bg); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
-  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
-  .stat span { font-size: 11px; color: var(--muted); }
-  textarea { width: 100%; font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; min-height: 54px; }
-  .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
-  .btn { font: inherit; font-size: 14px; background: var(--brand); color: #fff; border: 0; border-radius: 8px; padding: 9px 14px; cursor: pointer; }
-  .btn:disabled { opacity: .5; cursor: wait; }
-  .chip { font: inherit; font-size: 12px; background: var(--soft); color: var(--brand); border: 0; border-radius: 999px; padding: 5px 10px; cursor: pointer; }
-  .hint { font-size: 12px; color: var(--muted); }
-  .verdict { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: .04em; }
-  .verdict::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-  .v-trusted { background: #e6f4ea; color: var(--ok); }
-  .v-caveated { background: #fef7e0; color: #a86b00; }
-  .v-untrusted { background: #fdecea; color: var(--bad); }
-  .answer { font-size: 15px; line-height: 1.5; margin: 10px 0; }
-  .reasons { font-size: 12px; color: var(--muted); margin: 0; padding-left: 18px; }
-  .stn { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; font-size: 13px; padding: 7px 0; border-top: 1px solid var(--line); }
-  .stn i { font-style: normal; color: var(--muted); }
-  .trend-down { color: var(--bad); } .trend-up { color: var(--ok); }
-  .meta { font-size: 11px; color: var(--muted); margin-top: 8px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-  th, td { text-align: left; padding: 5px 4px; border-top: 1px solid var(--line); }
-  th { color: var(--muted); font-weight: 500; border-top: 0; }
-  .s-ok { color: var(--ok); } .s-partial { color: #a86b00; } .s-failed { color: var(--bad); }
-  svg.spark { width: 100%; height: 70px; display: block; }
-  .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); }
-  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--display); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- top bar ---------- */
+  .bar { height: 52px; display: flex; align-items: stretch; border-bottom: 1px solid var(--ink); background: var(--paper); position: relative; z-index: 1000; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 18px; border-right: 1px solid var(--ink); font-weight: 700; font-size: 19px; letter-spacing: -.02em; }
+  .brand svg { width: 22px; height: 22px; }
+  .crumbs { display: flex; align-items: center; gap: 14px; padding: 0 18px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .crumbs b { color: var(--ink); font-weight: 500; }
+  .spacer { flex: 1; }
+  .live { display: flex; align-items: center; gap: 10px; padding: 0 18px; border-left: 1px solid var(--ink); font: 500 12px var(--mono); font-variant-numeric: tabular-nums; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 rgba(20,163,90,.5); animation: pulse 2s infinite; }
+  .live.stale i { background: var(--bad); animation: none; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(20,163,90,.45); } 70% { box-shadow: 0 0 0 8px rgba(20,163,90,0); } 100% { box-shadow: 0 0 0 0 rgba(20,163,90,0); } }
+  .tabs { display: flex; border-left: 1px solid var(--ink); }
+  .tabs button { border: 0; background: transparent; padding: 0 20px; font: 500 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; border-right: 1px solid var(--ink); }
+  .tabs button.on { background: var(--ink); color: var(--paper); }
+  .tabs button:last-child { border-right: 0; }
+  .cta { display: flex; align-items: center; padding: 0 20px; background: var(--accent); border-left: 1px solid var(--ink); font-weight: 600; font-size: 15px; text-decoration: none; color: var(--ink); }
+
+  /* ---------- layout ---------- */
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 460px; height: calc(100vh - 52px); }
+  .stage { position: relative; border-right: 1px solid var(--ink); overflow: hidden; }
+  #map { position: absolute; inset: 0; background: var(--paper-2); }
+  .tiles { filter: grayscale(1) contrast(.92) brightness(1.06) sepia(.06); }
+  .leaflet-control-attribution { font: 10px var(--mono) !important; background: rgba(241,241,236,.85) !important; }
+  .leaflet-bar a { border-radius: 0 !important; color: var(--ink) !important; font-family: var(--mono) !important; }
+  .leaflet-bar { border: 1px solid var(--ink) !important; border-radius: 0 !important; box-shadow: none !important; }
+  .leaflet-popup-content-wrapper { border-radius: 0; border: 1px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); font-family: var(--display); }
+  .leaflet-popup-tip { display: none; }
+
+  /* OS-style window (TypeSafe-ish) */
+  .win { background: var(--card); border: 1px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
+  .win > header { display: flex; align-items: center; justify-content: space-between; background: var(--ink); color: var(--paper); padding: 6px 10px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .win > header span:last-child { color: #9c9c94; }
+  .win .body { padding: 14px; }
+
+  .stage::before { content: ""; position: absolute; left: 0; top: 0; width: 560px; height: 520px; z-index: 450; pointer-events: none;
+    background: radial-gradient(ellipse at 0 0, rgba(241,241,236,.96) 0%, rgba(241,241,236,.85) 38%, rgba(241,241,236,0) 72%); }
+  .hud { position: absolute; left: 20px; top: 20px; z-index: 500; width: 360px; }
+  .headline { font-size: 44px; line-height: .98; letter-spacing: -.035em; font-weight: 600; margin: 0 0 14px; text-shadow: 0 0 18px var(--paper), 0 0 2px var(--paper); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; }
+  .stat { padding: 12px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .stat:nth-child(2n) { border-right: 0; }
+  .stat:nth-child(n+3) { border-bottom: 0; }
+  .stat b { display: block; font-size: 30px; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.05; }
+  .stat span { font: 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .legend { display: flex; gap: 14px; padding: 10px 14px; border-top: 1px solid var(--line); font: 500 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.35); }
+
+  .sticker { position: absolute; right: 20px; bottom: 28px; z-index: 500; background: var(--accent); border: 1px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 10px 14px; font: 500 11px/1.5 var(--mono); max-width: 300px; }
+  .sticker b { font-family: var(--display); font-size: 15px; letter-spacing: -.01em; display: block; }
+
+  /* ---------- side panel ---------- */
+  aside { overflow-y: auto; background: var(--paper); }
+  aside section { padding: 20px; display: grid; gap: 18px; }
+  .label { font: 500 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  textarea { width: 100%; font: 500 20px/1.3 var(--display); letter-spacing: -.01em; border: 0; border-bottom: 1px solid var(--ink); background: transparent; padding: 6px 0 10px; resize: none; outline: none; color: var(--ink); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .chip { border: 1px solid var(--ink); background: transparent; padding: 5px 10px; font: 500 11px var(--mono); cursor: pointer; text-transform: lowercase; }
+  .chip:hover { background: var(--ink); color: var(--paper); }
+  .askrow { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .btn { border: 1px solid var(--ink); background: var(--ink); color: var(--paper); padding: 11px 18px; font-weight: 600; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; }
+  .btn:hover { background: var(--accent); color: var(--ink); }
+  .btn:disabled { opacity: .55; cursor: progress; }
+  .btn kbd { font: 500 10px var(--mono); opacity: .7; }
+  .ghost { border: 1px solid var(--ink); background: transparent; padding: 11px 12px; font: 500 11px var(--mono); cursor: pointer; text-transform: uppercase; letter-spacing: .06em; }
+  .where { font: 500 11px var(--mono); color: var(--muted); margin-top: 10px; }
+
+  .verdict { display: inline-flex; align-items: center; gap: 8px; font: 700 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 5px 9px; border: 1px solid currentColor; }
+  .verdict::before { content: ""; width: 7px; height: 7px; background: currentColor; }
+  .v-trusted { color: var(--ok); background: #e9f7ef; }
+  .v-caveated { color: #a26f00; background: #fdf6e0; }
+  .v-untrusted { color: var(--bad); background: #fdecec; }
+  .answer { font-size: 25px; line-height: 1.2; letter-spacing: -.02em; font-weight: 500; margin: 14px 0 6px; }
+  .answer b { background: var(--accent); padding: 0 3px; font-weight: 600; }
+  .reasons { margin: 8px 0 0; padding: 0; list-style: none; font: 12px/1.5 var(--mono); color: var(--ink-2); }
+  .reasons li::before { content: "→ "; }
+  .stn { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .stn .n { font: 700 12px var(--mono); }
+  .stn .nm { font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
+  .stn .sub { font: 11px var(--mono); color: var(--muted); margin-top: 2px; }
+  .bars { display: flex; gap: 2px; margin-top: 6px; height: 6px; }
+  .bars i { flex: 1; background: var(--paper-2); }
+  .bars i.b { background: var(--ink); } .bars i.e { background: #5b5bff; }
+  .trend { font: 700 12px var(--mono); text-align: right; }
+  .trend.down { color: var(--bad); } .trend.up { color: var(--ok); } .trend.wait { color: var(--muted); font-weight: 500; }
+  .meta { font: 10.5px/1.6 var(--mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 10px; margin-top: 6px; }
+  .err { color: var(--bad); font: 12px var(--mono); }
+  .thinking { font: 12px var(--mono); color: var(--muted); }
+  .thinking::after { content: "▍"; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- data health ---------- */
   #health { display: none; }
-  .tiles { filter: grayscale(1) contrast(.9) brightness(1.05); }
-  .err { color: var(--bad); font-size: 13px; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; height: auto; } #map { height: 55vh; } aside { border-left: 0; } }
+  .graph { position: relative; height: 230px; }
+  .graph svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .node { position: absolute; width: 124px; background: var(--card); border: 1px solid var(--ink); font: 10px/1.4 var(--mono); padding: 6px 8px; }
+  .node b { display: block; font: 600 13px var(--display); letter-spacing: -.01em; }
+  .node.hot { background: var(--accent); }
+  .node.soda { background: #ffe8de; }
+  .node em { font-style: normal; color: var(--muted); }
+  .kv { width: 100%; border-collapse: collapse; font: 12px var(--mono); font-variant-numeric: tabular-nums; }
+  .kv td, .kv th { padding: 7px 4px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .kv th { font: 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border-top: 0; }
+  .kv td.num { text-align: right; }
+  .s-ok { color: var(--ok); } .s-partial { color: #a26f00; } .s-failed { color: var(--bad); }
+  .bigline { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; }
+  .bigline b { font-size: 46px; letter-spacing: -.04em; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+  .bigline span { font: 11px var(--mono); color: var(--muted); }
+  svg.spark { width: 100%; height: 80px; display: block; }
+  .rej b { font: 700 12px var(--mono); }
+
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; height: auto; }
+    .stage { height: 62vh; border-right: 0; border-bottom: 1px solid var(--ink); }
+    .hud { width: auto; right: 20px; } .headline { font-size: 32px; } .sticker, .crumbs { display: none; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="logo" aria-hidden="true"></div>
-  <div><h1>Spoke</h1><div class="tag">Live Citi Bike, checked before it's trusted</div></div>
+<div class="bar">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#111" stroke-width="3"/><path d="M7 7l18 18M25 7L7 25" stroke="#111" stroke-width="3"/></svg>
+    Spoke
+  </div>
+  <div class="crumbs"><span>NYC</span><span>/</span><b>Citi Bike live</b><span>/</span><span>Supabase × Sodabase</span></div>
   <div class="spacer"></div>
-  <span id="fresh" class="fresh">connecting…</span>
-  <nav><button id="tab-ask" class="on">Ask</button> <button id="tab-health">Data health</button></nav>
-</header>
+  <div class="live" id="fresh"><i></i><span id="fresh-t">connecting…</span></div>
+  <nav class="tabs"><button id="tab-ask" class="on">Ask</button><button id="tab-health">Data health</button></nav>
+  <a class="cta" href="../" title="Project page">About ↗</a>
+</div>
+
 <main>
-  <div id="map"></div>
-  <aside>
-    <div class="card">
-      <h2>Network right now</h2>
-      <div class="stats">
-        <div class="stat"><b id="s-bikes">–</b><span>bikes</span></div>
-        <div class="stat"><b id="s-ebikes">–</b><span>e-bikes</span></div>
-        <div class="stat"><b id="s-empty">–</b><span>empty docks</span></div>
-        <div class="stat"><b id="s-stations">–</b><span>stations live</span></div>
-      </div>
-      <div class="legend" style="margin-top:10px">
-        <span><span class="dot" style="background:var(--bad)"></span>0 bikes</span>
-        <span><span class="dot" style="background:var(--warn)"></span>1–3</span>
-        <span><span class="dot" style="background:var(--ok)"></span>4+</span>
-        <span><span class="dot" style="background:#9aa5b5"></span>not renting</span>
+  <div class="stage">
+    <div id="map"></div>
+    <div class="hud">
+      <h1 class="headline">Live Citi Bike,<br>checked before<br>it's trusted.</h1>
+      <div class="win">
+        <header><span>network.live</span><span id="net-age">—</span></header>
+        <div class="stats">
+          <div class="stat"><b id="s-bikes">—</b><span>bikes</span></div>
+          <div class="stat"><b id="s-ebikes">—</b><span>e-bikes</span></div>
+          <div class="stat"><b id="s-empty">—</b><span>empty stations</span></div>
+          <div class="stat"><b id="s-stations">—</b><span>stations live</span></div>
+        </div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--bad)"></span>0</span>
+          <span><span class="dot" style="background:var(--warn)"></span>1–3</span>
+          <span><span class="dot" style="background:var(--ok)"></span>4+</span>
+          <span><span class="dot" style="background:var(--off)"></span>closed</span>
+        </div>
       </div>
     </div>
+    <div class="sticker"><b>Click anywhere on the map</b>to move your pin, then ask. Every answer is checked against the data first.</div>
+  </div>
 
+  <aside>
     <section id="ask">
-      <div class="card">
-        <h2>Ask Spoke</h2>
-        <textarea id="q" placeholder="Where can I grab an e-bike near here?">Where can I grab an e-bike near here?</textarea>
-        <div class="row">
-          <button class="chip" data-q="Where can I grab an e-bike near here?">e-bike</button>
-          <button class="chip" data-q="Where can I dock my bike near here?">free dock</button>
-          <button class="chip" data-q="Will there still be a bike here in 15 minutes?">in 15 min?</button>
-        </div>
-        <div class="row">
-          <button id="go" class="btn">Ask</button>
-          <button id="locate" class="chip">Use my location</button>
-          <span class="hint" id="where">Near Bryant Park. Click the map to move.</span>
+      <div class="win">
+        <header><span>ask.spoke</span><span>edge fn · /ask</span></header>
+        <div class="body">
+          <div class="label">Your question</div>
+          <textarea id="q" rows="2">Where can I grab an e-bike near here?</textarea>
+          <div class="chips">
+            <button class="chip" data-q="Where can I grab an e-bike near here?">e-bike near me</button>
+            <button class="chip" data-q="Where can I dock my bike near here?">free dock</button>
+            <button class="chip" data-q="Will there still be a bike here in 15 minutes?">in 15 min?</button>
+          </div>
+          <div class="askrow">
+            <button id="go" class="btn">Ask Spoke <kbd>↵</kbd></button>
+            <button id="locate" class="ghost">◎ My location</button>
+          </div>
+          <div class="where" id="where">📍 Near Bryant Park, Midtown</div>
         </div>
       </div>
-      <div class="card" id="result" style="display:none"></div>
+      <div class="win" id="result" style="display:none"></div>
+      <div class="win">
+        <header><span>how.it.works</span><span>3 steps</span></header>
+        <div class="body" style="font:12px/1.6 var(--mono);color:var(--ink-2)">
+          01 · pg_cron pulls the Citi Bike feed into Supabase every minute.<br>
+          02 · A 10-rule data contract quarantines bad rows before they land.<br>
+          03 · Each answer is gated on pipeline health + Sodabase <b>check_trust</b>.
+        </div>
+      </div>
     </section>
 
     <section id="health">
-      <div class="card">
-        <h2>Trust gate</h2>
-        <div id="h-trust"></div>
+      <div class="win">
+        <header><span>pipeline.graph</span><span>live</span></header>
+        <div class="body"><div class="graph" id="graph"></div></div>
       </div>
-      <div class="card">
-        <h2>Bikes available, last 3 hours <span class="hint">(system_pulse)</span></h2>
-        <svg class="spark" id="spark" viewBox="0 0 400 70" preserveAspectRatio="none"></svg>
+      <div class="win">
+        <header><span>trust.gate</span><span>trust_metrics()</span></header>
+        <div class="body" id="h-trust"></div>
       </div>
-      <div class="card">
-        <h2>Ingest runs <span class="hint">(pg_cron → edge function)</span></h2>
-        <table id="h-runs"></table>
+      <div class="win">
+        <header><span>system_pulse</span><span>bikes · 3 h</span></header>
+        <div class="body"><svg class="spark" id="spark" viewBox="0 0 400 80" preserveAspectRatio="none"></svg></div>
       </div>
-      <div class="card">
-        <h2>Quarantine, last hour <span class="hint">(rejected_records)</span></h2>
-        <table id="h-rejects"></table>
+      <div class="win">
+        <header><span>ingest_runs</span><span>pg_cron → edge fn</span></header>
+        <div class="body"><table class="kv" id="h-runs"></table></div>
       </div>
-      <div class="card">
-        <h2>Tables</h2>
-        <table id="h-counts"></table>
+      <div class="win">
+        <header><span>rejected_records</span><span>quarantine · 1 h</span></header>
+        <div class="body"><table class="kv" id="h-rejects"></table></div>
       </div>
-      <div class="card">
-        <h2>Recent answers <span class="hint">(ai_answers)</span></h2>
-        <table id="h-answers"></table>
+      <div class="win">
+        <header><span>tables</span><span>public.*</span></header>
+        <div class="body"><table class="kv" id="h-counts"></table></div>
+      </div>
+      <div class="win">
+        <header><span>ai_answers</span><span>every answer, logged</span></header>
+        <div class="body"><table class="kv" id="h-answers"></table></div>
       </div>
     </section>
   </aside>
@@ -147,39 +249,46 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (n) => Number(n ?? 0).toLocaleString('en-US');
-const ago = (iso) => { const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000)); return s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
+let skew = 0; // server clock minus browser clock, so "ago" is right on any laptop
+const now = () => Date.now() + skew;
+const ago = (iso) => { const s = Math.max(0, Math.round((now() - Date.parse(iso)) / 1000)); return s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`; };
 
 // ---------- map ----------
 let here = { lat: 40.7549, lon: -73.984 };
-const map = L.map('map', { zoomControl: true }).setView([here.lat, here.lon], 15);
+const map = L.map('map', { zoomControl: true, attributionControl: true }).setView([here.lat, here.lon - 0.006], 15);
+window.spokeMap = map; // for scripted demos (scripts/media/record-live.mjs)
+map.zoomControl.setPosition('bottomleft');
+new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById('map'));
+window.addEventListener('load', () => map.invalidateSize());
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors · Station data: Citi Bike GBFS', maxZoom: 19,
-  className: 'tiles',
+  attribution: '© OpenStreetMap · Station data: Citi Bike GBFS', maxZoom: 19, className: 'tiles',
 }).addTo(map);
 const layer = L.layerGroup().addTo(map);
-const youIcon = L.divIcon({ className: '', html: '<div style="width:16px;height:16px;border-radius:50%;background:#1452e0;border:3px solid #fff;box-shadow:0 0 0 2px #1452e0"></div>', iconSize: [16, 16] });
+const marks = L.layerGroup().addTo(map);
+const youIcon = L.divIcon({ className: '', iconSize: [22, 22],
+  html: '<div style="width:22px;height:22px;border-radius:50%;background:#e4ff5c;border:2px solid #111;box-shadow:3px 3px 0 #111"></div>' });
 const you = L.marker([here.lat, here.lon], { icon: youIcon, zIndexOffset: 1000 }).addTo(map);
 function setHere(lat, lon, label) {
-  here = { lat, lon }; you.setLatLng([lat, lon]);
-  $('where').textContent = label || `Near ${lat.toFixed(4)}, ${lon.toFixed(4)}.`;
+  here = { lat, lon }; you.setLatLng([lat, lon]); marks.clearLayers();
+  $('where').textContent = `📍 ${label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`}`;
 }
 map.on('click', (e) => setHere(e.latlng.lat, e.latlng.lng));
 $('locate').onclick = () => navigator.geolocation?.getCurrentPosition(
-  (p) => { setHere(p.coords.latitude, p.coords.longitude, 'Near you.'); map.setView([p.coords.latitude, p.coords.longitude], 16); },
-  () => { $('where').textContent = 'Location blocked; click the map instead.'; });
+  (p) => { setHere(p.coords.latitude, p.coords.longitude, 'Your location'); map.setView([p.coords.latitude, p.coords.longitude], 16); },
+  () => { $('where').textContent = 'Location blocked — click the map instead.'; });
 
-const color = (s) => (!s.r ? '#9aa5b5' : s.b === 0 ? '#d93025' : s.b <= 3 ? '#e8a317' : '#0f9d58');
+const color = (s) => (!s.r ? '#a8a8a0' : s.b === 0 ? '#e5484d' : s.b <= 3 ? '#e3a008' : '#14a35a');
 async function loadStations() {
   const { data, error } = await sb.rpc('live_stations');
-  if (error) { $('fresh').textContent = 'database unreachable'; $('fresh').classList.add('stale'); return; }
+  if (error) { $('fresh-t').textContent = 'database unreachable'; $('fresh').classList.add('stale'); return; }
   layer.clearLayers();
   let bikes = 0, ebikes = 0, empty = 0;
   for (const s of data) {
     bikes += s.b; ebikes += s.e; if (s.r && s.b === 0) empty++;
-    L.circleMarker([s.la, s.lo], { radius: 4 + Math.min(3, s.c / 20), color: '#fff', weight: 1, fillColor: color(s), fillOpacity: .95 })
-      .bindPopup(`<b>${esc(s.n)}</b><br>${s.b} bikes (${s.e} e-bikes) · ${s.d} free docks of ${s.c}` +
-                 `${s.r ? '' : '<br><b>Not renting</b>'}<br><small>reported ${s.age}s ago</small>`)
-      .on('click', () => setHere(s.la, s.lo, `At ${s.n}.`))
+    L.circleMarker([s.la, s.lo], { radius: 4.5 + Math.min(3, s.c / 22), color: '#111', weight: 1, fillColor: color(s), fillOpacity: 1 })
+      .bindPopup(`<b>${esc(s.n)}</b><br><span style="font:11px var(--mono)">${s.b} bikes · ${s.e} e-bikes · ${s.d}/${s.c} docks free` +
+                 `${s.r ? '' : '<br>NOT RENTING'}<br>reported ${s.age}s ago</span>`)
+      .on('click', () => setHere(s.la, s.lo, s.n))
       .addTo(layer);
   }
   $('s-bikes').textContent = fmt(bikes); $('s-ebikes').textContent = fmt(ebikes);
@@ -190,53 +299,83 @@ async function loadStations() {
 let statusAt = null;
 function tick() {
   if (!statusAt) return;
-  const s = Math.round((Date.now() - Date.parse(statusAt)) / 1000);
-  $('fresh').textContent = `station_status updated ${s}s ago`;
+  const s = Math.max(0, Math.round((now() - Date.parse(statusAt)) / 1000));
+  $('fresh-t').textContent = `station_status · updated ${s}s ago`;
+  $('net-age').textContent = `${s}s`;
   $('fresh').classList.toggle('stale', s > 180);
 }
 setInterval(tick, 1000);
 
 function verdictOf(t) {
-  if (t.status_age_s == null) return 'untrusted';
-  if (t.status_age_s > 180 || t.runs_15m === 0) return 'untrusted';
+  if (t.status_age_s == null || t.status_age_s > 180 || t.runs_15m === 0) return 'untrusted';
   if (t.status_age_s > 90 || t.failed_runs_15m > 0 || t.last_status_run?.status === 'partial') return 'caveated';
   return 'trusted';
+}
+
+function drawGraph(h) {
+  const r = h.runs.find((x) => x.job === 'status') || {};
+  const rej = h.rejects.reduce((n, x) => n + Number(x.stations), 0);
+  const nodes = [
+    { id: 'gbfs', x: 0, y: 8, t: 'Citi Bike GBFS', s: `${fmt(r.rows_in)} records` },
+    { id: 'cron', x: 0, y: 118, t: 'pg_cron', s: '<em>* * * * *</em> · pg_net', hot: true },
+    { id: 'ing', x: 140, y: 62, t: 'ingest', s: `edge fn · ${r.secs ?? '–'}s` },
+    { id: 'live', x: 280, y: 8, t: 'station_status', s: `${fmt(r.rows_written)} changed` },
+    { id: 'q', x: 280, y: 118, t: 'quarantine', s: `${fmt(rej)} stations` },
+    { id: 'soda', x: 140, y: 172, t: 'Sodabase', s: 'watching · MCP', soda: true },
+  ];
+  const el = $('graph'), W = el.clientWidth, sx = (W - 124) / 280;
+  const pos = Object.fromEntries(nodes.map((n) => [n.id, { x: n.x * sx, y: n.y }]));
+  const link = (a, b, dashed) => {
+    const A = pos[a], B = pos[b], x1 = A.x + 124, y1 = A.y + 22, x2 = B.x, y2 = B.y + 22, mx = (x1 + x2) / 2;
+    return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="#111" stroke-width="1.2" ${dashed ? 'stroke-dasharray="4 4"' : ''}/>
+            <circle cx="${x1}" cy="${y1}" r="3" fill="#111"/><circle cx="${x2}" cy="${y2}" r="3" fill="#fbfbf8" stroke="#111"/>`;
+  };
+  const back = (a, b) => { const A = pos[a], B = pos[b]; const x1 = A.x + 62, y1 = A.y + 44, x2 = B.x + 62, y2 = B.y;
+    return `<path d="M${x1},${y1} L${x2},${y2}" stroke="#111" stroke-width="1.2" fill="none" marker-end="url(#ah)"/>`; };
+  el.innerHTML = `<svg><defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#111"/></marker></defs>
+    ${back('cron', 'gbfs').replace('marker-end', 'stroke-dasharray="2 3" marker-end')}${link('gbfs', 'ing')}${link('cron', 'ing')}${link('ing', 'live')}${link('ing', 'q')}
+    <path d="M${pos.live.x + 62},${pos.live.y + 46} C${pos.live.x + 62},200 ${pos.soda.x + 160},${pos.soda.y + 22} ${pos.soda.x + 124},${pos.soda.y + 22}" fill="none" stroke="#111" stroke-width="1.2" stroke-dasharray="4 4"/></svg>` +
+    nodes.map((n) => `<div class="node${n.hot ? ' hot' : ''}${n.soda ? ' soda' : ''}" style="left:${pos[n.id].x}px;top:${pos[n.id].y}px"><b>${n.t}</b>${n.s}</div>`).join('');
 }
 
 async function loadHealth() {
   const { data: h, error } = await sb.rpc('health_summary');
   if (error) return;
+  skew = Date.parse(h.trust.now) - Date.now();
   statusAt = h.trust.status_updated_at; tick();
   const t = h.trust, v = verdictOf(t);
   $('h-trust').innerHTML = `<span class="verdict v-${v}">${v}</span>
-    <table style="margin-top:8px">
-      <tr><td>station_status age</td><td>${t.status_age_s ?? '–'} s (untrusted after 180 s)</td></tr>
-      <tr><td>Ingest runs, last 15 min</td><td>${t.runs_15m} (${t.failed_runs_15m} failed)</td></tr>
-      <tr><td>Stations reporting</td><td>${fmt(t.stations_installed)} of ${fmt(t.stations_total)}</td></tr>
-      <tr><td>Last snapshot</td><td>${t.last_snapshot_at ? ago(t.last_snapshot_at) : '–'}</td></tr>
-      <tr><td>Sodabase</td><td>checked server-side on every answer (check_trust on public.station_status)</td></tr>
+    <div class="bigline"><b>${t.status_age_s ?? '–'}s</b><span>since station_status last changed<br>untrusted after 180s</span></div>
+    <table class="kv" style="margin-top:12px">
+      <tr><td>ingest runs · last 15 min</td><td class="num">${t.runs_15m} <span class="${t.failed_runs_15m ? 's-failed' : 's-ok'}">(${t.failed_runs_15m} failed)</span></td></tr>
+      <tr><td>stations reporting</td><td class="num">${fmt(t.stations_installed)} / ${fmt(t.stations_total)}</td></tr>
+      <tr><td>last history snapshot</td><td class="num">${t.last_snapshot_at ? ago(t.last_snapshot_at) : 'warming up'}</td></tr>
+      <tr><td>sodabase</td><td class="num">check_trust on every answer</td></tr>
     </table>`;
   const p = h.pulse;
   if (p.length > 1) {
     const ys = p.map((r) => r.bikes), min = Math.min(...ys), max = Math.max(...ys), span = Math.max(1, max - min);
-    const pts = p.map((r, i) => `${(i / (p.length - 1)) * 400},${66 - ((r.bikes - min) / span) * 60}`).join(' ');
-    $('spark').innerHTML = `<polyline points="${pts}" fill="none" stroke="#1452e0" stroke-width="2" vector-effect="non-scaling-stroke"/>
-      <text x="2" y="10" font-size="10" fill="#5b6b82">${fmt(max)}</text><text x="2" y="68" font-size="10" fill="#5b6b82">${fmt(min)}</text>`;
+    const pts = p.map((r, i) => `${((i / (p.length - 1)) * 400).toFixed(1)},${(74 - ((r.bikes - min) / span) * 64).toFixed(1)}`);
+    $('spark').innerHTML = `<polygon points="0,80 ${pts.join(' ')} 400,80" fill="#e4ff5c" opacity=".7"/>
+      <polyline points="${pts.join(' ')}" fill="none" stroke="#111" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+      <text x="4" y="12" font-size="10" font-family="JetBrains Mono" fill="#111">${fmt(max)}</text><text x="4" y="78" font-size="10" font-family="JetBrains Mono" fill="#7b7b74">${fmt(min)}</text>`;
   } else {
-    $('spark').innerHTML = '<text x="4" y="38" font-size="12" fill="#5b6b82">Collecting… one point per minute.</text>';
+    $('spark').innerHTML = '<text x="4" y="44" font-size="11" font-family="JetBrains Mono" fill="#7b7b74">collecting · one point per minute</text>';
   }
-  $('h-runs').innerHTML = '<tr><th>#</th><th>job</th><th>status</th><th>when</th><th>in</th><th>changed</th><th>rejected</th><th>feed age</th></tr>' +
-    h.runs.map((r) => `<tr title="${esc(r.note)}"><td>${r.id}</td><td>${r.job}</td><td class="s-${r.status}">${r.status}</td><td>${ago(r.created_at)}</td>
-      <td>${fmt(r.rows_in)}</td><td>${fmt(r.rows_written)}</td><td>${fmt(r.rows_rejected)}</td><td>${r.feed_age_s ?? '–'}s</td></tr>`).join('');
+  $('h-runs').innerHTML = '<tr><th>#</th><th>job</th><th>status</th><th>when</th><th class="num">in</th><th class="num">chg</th><th class="num">rej</th></tr>' +
+    h.runs.map((r) => `<tr title="${esc(r.note)}"><td>${r.id}</td><td>${r.job}</td><td class="s-${r.status}">● ${r.status}</td><td>${ago(r.created_at)}</td>
+      <td class="num">${fmt(r.rows_in)}</td><td class="num">${fmt(r.rows_written)}</td><td class="num">${fmt(r.rows_rejected)}</td></tr>`).join('');
   $('h-rejects').innerHTML = h.rejects.length
-    ? '<tr><th>reason</th><th>stations</th><th>example</th></tr>' + h.rejects.map((r) =>
-        `<tr><td><b>${esc(r.reason)}</b><br><span class="hint">${esc(r.feed)}</span></td><td>${fmt(r.stations)}</td><td>${esc(r.example)}</td></tr>`).join('')
-    : '<tr><td class="hint">Nothing quarantined in the last hour.</td></tr>';
-  $('h-counts').innerHTML = Object.entries(h.counts).map(([k, n]) => `<tr><td>${k}</td><td>${fmt(n)} rows</td></tr>`).join('');
+    ? '<tr><th>reason</th><th class="num">stations</th></tr>' + h.rejects.map((r) =>
+        `<tr class="rej"><td><b>${esc(r.reason)}</b><br><span style="color:var(--muted)">${esc(r.example)}</span></td><td class="num">${fmt(r.stations)}</td></tr>`).join('')
+    : '<tr><td style="color:var(--muted)">nothing quarantined in the last hour</td></tr>';
+  $('h-counts').innerHTML = Object.entries(h.counts).map(([k, n]) => `<tr><td>${k}</td><td class="num">${fmt(n)} rows</td></tr>`).join('');
   $('h-answers').innerHTML = h.answers.length
-    ? '<tr><th>when</th><th>question</th><th>gate</th><th>ms</th></tr>' + h.answers.map((a) =>
-        `<tr title="${esc(a.model)}"><td>${ago(a.created_at)}</td><td>${esc(a.question).slice(0, 60)}</td><td><span class="verdict v-${a.verdict}">${a.verdict}</span></td><td>${a.latency_ms}</td></tr>`).join('')
-    : '<tr><td class="hint">No questions yet.</td></tr>';
+    ? '<tr><th>when</th><th>question</th><th>gate</th></tr>' + h.answers.map((a) =>
+        `<tr title="${esc(a.model)} · ${a.latency_ms} ms"><td>${ago(a.created_at)}</td><td>${esc(a.question).slice(0, 44)}</td><td><span class="verdict v-${a.verdict}" style="padding:2px 6px;font-size:9px">${a.verdict}</span></td></tr>`).join('')
+    : '<tr><td style="color:var(--muted)">no questions yet</td></tr>';
+  if ($('health').style.display === 'grid') drawGraph(h);
+  window.__health = h;
 }
 
 // ---------- ask ----------
@@ -244,11 +383,15 @@ document.querySelectorAll('.chip[data-q]').forEach((b) => (b.onclick = () => { $
 $('go').onclick = ask;
 $('q').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } });
 
+const bars = (s) => { const n = Math.min(24, s.capacity || 1), k = (x) => Math.round((x / Math.max(1, s.capacity)) * n);
+  return `<div class="bars">${Array.from({ length: n }, (_, i) => `<i class="${i < k(s.ebikes) ? 'e' : i < k(s.bikes) ? 'b' : ''}"></i>`).join('')}</div>`; };
+
 async function ask() {
   const question = $('q').value.trim();
   if (!question) return;
-  $('go').disabled = true; $('go').textContent = 'Checking trust…';
-  const box = $('result'); box.style.display = 'block'; box.innerHTML = '<span class="hint">Checking the data, then answering…</span>';
+  $('go').disabled = true;
+  const box = $('result'); box.style.display = 'block';
+  box.innerHTML = '<header><span>answer</span><span>checking trust…</span></header><div class="body"><div class="thinking">trust_metrics() · sodabase check_trust · nearest_stations() </div></div>';
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/ask`, {
       method: 'POST',
@@ -258,28 +401,33 @@ async function ask() {
     const r = await res.json();
     if (!res.ok) throw new Error(r.error || res.statusText);
     const cite = (txt) => esc(txt).replace(/\[(\d)\]/g, '<b>[$1]</b>');
-    box.innerHTML = `<span class="verdict v-${r.verdict}">${r.verdict}</span>
+    box.innerHTML = `<header><span>answer</span><span>${r.latency_ms} ms</span></header><div class="body">
+      <span class="verdict v-${r.verdict}">${r.verdict}</span>
       <div class="answer">${cite(r.answer)}</div>
       ${r.trust.reasons.length ? `<ul class="reasons">${r.trust.reasons.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
-      ${r.stations.map((s, i) => {
-        const tr = s.trend_per_hour == null ? '<i>trend: warming up</i>'
-          : `<span class="${s.trend_per_hour < 0 ? 'trend-down' : 'trend-up'}">${s.trend_per_hour > 0 ? '+' : ''}${s.trend_per_hour}/h</span>`;
-        return `<div class="stn"><b>[${i + 1}]</b><div>${esc(s.name)}<br><i>${s.distance_m} m · ${s.bikes} bikes (${s.ebikes} e) · ${s.docks} docks</i></div><div>${tr}</div></div>`;
-      }).join('')}
-      <div class="meta">Pipeline: ${r.trust.pipeline} · Sodabase: ${esc(r.trust.sodabase.verdict)} (${esc(r.trust.sodabase.source)}) · ${esc(r.model)} · ${r.latency_ms} ms</div>`;
-    r.stations.forEach((s) => L.circle([s.lat, s.lon], { radius: 40, color: '#1452e0', weight: 2, fill: false }).addTo(layer));
+      <div style="margin-top:12px">${r.stations.map((s, i) => {
+        const tr = s.trend_per_hour == null ? '<span class="trend wait">trend ·<br>warming up</span>'
+          : `<span class="trend ${s.trend_per_hour < 0 ? 'down' : 'up'}">${s.trend_per_hour > 0 ? '+' : ''}${s.trend_per_hour}/h</span>`;
+        return `<div class="stn"><span class="n">[${i + 1}]</span><div><div class="nm">${esc(s.name)}</div>
+          <div class="sub">${s.distance_m} m · ${s.bikes} bikes (${s.ebikes} e) · ${s.docks} docks free</div>${bars(s)}</div>${tr}</div>`;
+      }).join('')}</div>
+      <div class="meta">pipeline: ${r.trust.pipeline} · sodabase: ${esc(r.trust.sodabase.verdict)} (${esc(r.trust.sodabase.source)})<br>model: ${esc(r.model)}</div></div>`;
+    marks.clearLayers();
+    r.stations.forEach((s, i) => L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', iconSize: [24, 18], iconAnchor: [-6, 9],
+      html: `<div style="font:700 10px JetBrains Mono,monospace;background:#111;color:#e4ff5c;padding:2px 5px;white-space:nowrap">[${i + 1}]</div>` }) }).addTo(marks));
     loadHealth();
   } catch (e) {
-    box.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+    box.innerHTML = `<header><span>answer</span><span>error</span></header><div class="body"><div class="err">${esc(e.message)}</div></div>`;
   } finally {
-    $('go').disabled = false; $('go').textContent = 'Ask';
+    $('go').disabled = false;
   }
 }
 
 // ---------- tabs ----------
 const tabs = { ask: $('tab-ask'), health: $('tab-health') };
 for (const [name, btn] of Object.entries(tabs)) btn.onclick = () => {
-  for (const [n, b] of Object.entries(tabs)) { b.classList.toggle('on', n === name); $(n).style.display = n === name ? 'block' : 'none'; }
+  for (const [n, b] of Object.entries(tabs)) { b.classList.toggle('on', n === name); $(n).style.display = n === name ? 'grid' : 'none'; }
+  if (name === 'health' && window.__health) drawGraph(window.__health);
 };
 if (location.hash === '#health') tabs.health.click();
 

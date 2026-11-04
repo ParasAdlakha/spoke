@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spoke — market brief</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #f1f1ec; --card: #fbfbf8; --ink: #111; --ink-2: #3b3b38; --muted: #7b7b74; --line: #d7d7cf; --accent: #e4ff5c; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 "Inter Tight", Arial, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 60px 28px 90px; }
+  .label { font: 500 11px "JetBrains Mono", monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-size: 52px; line-height: 1; letter-spacing: -.045em; font-weight: 600; margin: 14px 0 18px; }
+  h2 { font-size: 30px; letter-spacing: -.03em; font-weight: 600; margin: 52px 0 12px; }
+  p, li { color: var(--ink-2); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); font-size: 15px; }
+  th, td { text-align: left; padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--ink); color: var(--paper); font: 500 11px "JetBrains Mono", monospace; letter-spacing: .08em; text-transform: uppercase; border: 0; }
+  .call { background: var(--accent); border: 1px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 18px 20px; margin-top: 26px; }
+  a { color: var(--ink); }
+  small { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div class="label">Spoke · market brief · Supabase + Sodabase NYC Hackathon, 4 Nov 2026</div>
+  <h1>Real-time public data is everywhere. Trust in it isn't.</h1>
+  <p>Spoke is a pattern, shown on Citi Bike: ingest a live public feed into Supabase on a schedule, enforce a written data contract, quarantine what fails, let Sodabase learn what normal looks like, and gate every user-facing answer on that state.</p>
+
+  <h2>The problem, in numbers</h2>
+  <table>
+    <tr><th>Fact</th><th>Source</th></tr>
+    <tr><td>Citi Bike: ~2,500 stations across NYC, Jersey City and Hoboken; 44.3 million trips in 2024; a single-day record of 193,645 rides (20 Sep 2024)</td><td>NYC DOT monthly reports; Wikipedia</td></tr>
+    <tr><td>One pull of the live feed (4 Nov 2026): 48 stations with <code>last_reported</code> = 1970, 9 over capacity, 5 "installed" stations silent for 24 h+</td><td>Spoke's own profile, <code>data/README.md</code></td></tr>
+    <tr><td>GBFS is the open standard for shared mobility feeds, published by hundreds of bike, scooter and car-share systems worldwide</td><td>MobilityData, GBFS</td></tr>
+    <tr><td>Consumers of these feeds — trip planners, maps, city dashboards, AI assistants — read them directly, usually without validation</td><td>Common practice; GBFS has a validator but no runtime contract</td></tr>
+  </table>
+
+  <h2>Who needs this</h2>
+  <ul>
+    <li><b>Riders and trip-planning apps:</b> a wrong "3 bikes" costs a ten-minute walk. Showing "data is 12 min old" is better than a confident wrong number.</li>
+    <li><b>Operators (Lyft / Citi Bike, other GBFS systems):</b> the quarantine is a ready-made bug list for their own feed: decommissioned docks still published, capacity mismatches.</li>
+    <li><b>City agencies:</b> NYC DOT reports and plans from this data; a contract and an audit trail make the numbers defensible.</li>
+    <li><b>Anyone putting an AI assistant on live data:</b> the trust gate generalises. The model is only called when the data has passed its checks.</li>
+  </ul>
+
+  <h2>What exists today</h2>
+  <table>
+    <tr><th>Approach</th><th>Gap</th></tr>
+    <tr><td>Consumer apps (Citi Bike app, Google Maps, Transit)</td><td>Show the feed as-is; no visible freshness or quality signal per station</td></tr>
+    <tr><td>GBFS validator (MobilityData)</td><td>Checks schema conformance of a feed, not runtime plausibility (1970 timestamps pass), and doesn't watch over time</td></tr>
+    <tr><td>Data observability (Soda, Monte Carlo, Great Expectations)</td><td>Watch the warehouse for engineers; the end user asking a question never sees the verdict</td></tr>
+    <tr><td>Chat-with-your-data assistants</td><td>Answer fluently from whatever is in the table, stale or not</td></tr>
+  </table>
+
+  <h2>Why Spoke is different</h2>
+  <ul>
+    <li><b>The answer depends on data health.</b> Pipeline metrics and Sodabase's verdict decide whether the model is even called.</li>
+    <li><b>Contract at the door, twice.</b> TypeScript rules (tested) plus Postgres <code>CHECK</code> constraints.</li>
+    <li><b>Explainable rejections.</b> Every quarantined row has a reason a human can read and act on.</li>
+    <li><b>All Supabase.</b> pg_cron, pg_net, Vault, edge functions, RLS: no extra infrastructure to run.</li>
+  </ul>
+
+  <h2>Where it goes next</h2>
+  <ul>
+    <li>Hour-of-week availability curves per station from <code>status_snapshots</code> ("this dock empties by 8:40 on weekdays").</li>
+    <li>The same contract for every GBFS system (Divvy, Bay Wheels, Capital Bikeshare), configured by feed URL.</li>
+    <li>Quarantine digests sent to the feed operator; Slack alerts via Sodabase for the team.</li>
+    <li>Rolling old snapshots into hourly aggregates (~350,000 rows/day today).</li>
+  </ul>
+
+  <h2>Risks and how we handle them</h2>
+  <table>
+    <tr><th>Risk</th><th>Mitigation</th></tr>
+    <tr><td>The upstream feed changes shape</td><td>Unknown or invalid records are quarantined, not written; a run that rejects over 10% is marked partial and the answer is caveated</td></tr>
+    <tr><td>The cron chain silently stops</td><td>Freshness over 3 minutes makes every answer "untrusted"; Sodabase flags the stale tables</td></tr>
+    <tr><td>Storage growth on the free tier</td><td>Snapshots every 10 min, not every minute; roll-ups next</td></tr>
+    <tr><td>Model invents numbers</td><td>The model only phrases a facts block; with no key, a fixed template answers from the same facts</td></tr>
+  </table>
+
+  <div class="call"><b>Spoke:</b> live Citi Bike, checked before it's trusted. <a href="app/">Open the live app</a> · <a href="https://github.com/ParasAdlakha/spoke">Code</a></div>
+  <p><small>Sources: NYC DOT Citi Bike monthly operating reports; Wikipedia, "Citi Bike"; MobilityData GBFS; Sodabase docs; Spoke's feed profile of 4 Nov 2026.</small></p>
+</main>
+</body>
+</html>

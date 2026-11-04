@@ -10,7 +10,11 @@ Built by **Paras Adlakha** and **Harshita Adlakha** for the **Supabase + Sodabas
 
 ![Spoke: live station map on the left, a trust-gated answer on the right](docs/img/answer.png)
 
-*The live app. Left: every installed Citi Bike station, coloured by bikes available. Right: the answer, its trust verdict, and the stations it cites.*
+*The live app. Left: every installed Citi Bike station, coloured by bikes available, with the cited stations tagged [n]. Right: the answer, its trust verdict, and each station with live counts.*
+
+![Data health: the live pipeline graph, the trust gate and the bikes-available pulse](docs/img/health.png)
+
+*Data health: the pipeline as a graph with live counts, the trust gate the answer was checked against, and one `system_pulse` point per minute.*
 
 **Contents:** [The hackathon](#the-hackathon) · [The problem](#the-problem) · [What Spoke does](#what-spoke-does) · [Architecture](#architecture) · [The data contract](#the-data-contract) · [The trust gate](#the-trust-gate) · [Built for Sodabase](#built-for-sodabase) · [Supabase features used](#supabase-features-used) · [Real numbers](#real-numbers) · [Tests](#tests) · [Run it yourself](#run-it-yourself) · [Repository layout](#repository-layout) · [What we learned](#what-we-learned) · [Limitations and roadmap](#limitations-and-roadmap) · [Team](#team) · [References](#references)
 
@@ -179,7 +183,7 @@ Sodabase learns how each table normally changes and flags data that's stale, emp
 
 | Sodabase check | How Spoke's tables behave |
 |---|---|
-| **Stale** (freshness, from `updated_at` / `created_at`) | `ingest_runs`, `system_pulse`: one row per minute, `created_at`, insert-only. `status_snapshots`: ~2,450 rows every 10 min. `station_status.updated_at`: dozens of stations change every minute. A stopped cron shows up within minutes |
+| **Stale** (freshness, from `updated_at` / `created_at`) | `ingest_runs`, `system_pulse`: one row per minute, `created_at`, insert-only. `status_snapshots`: ~2,450 rows every 10 min. `station_status.updated_at`: about 1,800 stations re-report every minute. A stopped cron shows up within minutes |
 | **Empty** (row count drops, truncation) | Nothing is ever deleted or truncated. History tables only grow; `stations` and `station_status` hold ~2,500 rows, upserted in place |
 | **Wrong** (schema / shape) | The schema lives only in migrations; nothing alters tables at runtime. Bad values are blocked by the contract and `CHECK` constraints, and recorded in `rejected_records` |
 
@@ -218,7 +222,8 @@ From the deployed project (`spoke-nyc`, us-east-1) on 4 November 2026:
 | Quarantined | 57 (48 `bogus_timestamp`, 9 `over_capacity`) |
 | Installed stations live | 2,455 |
 | Bikes / e-bikes on the network at 19:30 UTC | 32,553 / 14,051 |
-| `ask` latency, trusted path, template answer | ~5 s cold, under 1 s warm |
+| Statuses that change per minute | ~1,800 (each `ingest` run takes ~0.4 s) |
+| `ask` latency, trusted path | 1.3–2.1 s end to end (trust metrics, Sodabase call, nearest stations, answer) |
 
 ---
 
@@ -256,6 +261,10 @@ npm run sql -- "select * from ingest_runs order by id desc limit 5"
 
 Then put your project URL and publishable key in [`docs/app/config.js`](docs/app/config.js) and open `docs/app/index.html` (or `npm run serve`). To connect Sodabase, sign in at [sodabase.io](https://sodabase.io) with Supabase and choose the project.
 
+### Media
+
+The screenshots, slides and videos in `docs/` were made from a real session against the live project with [`scripts/media`](scripts/media): `record-live.mjs` drives the app in headless Chrome and records it, `render.mjs` renders `docs/slides/slides.html`, `build-deck.cjs` builds the PowerPoint with the script in the speaker notes, `pdf.mjs` builds the PDF, and `spoke-video.mjs` cuts the three videos with edge-tts narration.
+
 ---
 
 ## Repository layout
@@ -280,6 +289,7 @@ docs/
   slides/ video/ img/ market-brief.html
 data/README.md                          source, licence, contract, feed profile
 scripts/                                setup (Vault + first ingest), sql runner
+  media/                                screen recording, slides, deck, videos (not needed to run Spoke)
 test/                                   15 unit tests
 ```
 

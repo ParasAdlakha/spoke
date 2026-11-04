@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spoke — live Citi Bike, checked before it's trusted</title>
+<meta name="description" content="Spoke pulls the Citi Bike feed into Supabase every minute, quarantines bad rows, and gates every AI answer on data trust from Sodabase. Supabase + Sodabase NYC Hackathon.">
+<meta property="og:title" content="Spoke — live Citi Bike, checked before it's trusted">
+<meta property="og:description" content="pg_cron + edge functions on Supabase, a 10-rule data contract, and Sodabase-gated AI answers.">
+<meta property="og:image" content="https://parasadlakha.github.io/spoke/img/linkedin-cover.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23111' stroke-width='3'/%3E%3Cpath d='M7 7l18 18M25 7L7 25' stroke='%23111' stroke-width='3'/%3E%3C/svg%3E">
+<style>
+  :root { --paper: #f1f1ec; --card: #fbfbf8; --ink: #111; --ink-2: #3b3b38; --muted: #7b7b74; --line: #d7d7cf; --accent: #e4ff5c; --ok: #14a35a; --bad: #e5484d; --warn: #e3a008;
+    --display: "Inter Tight", "Helvetica Neue", Arial, sans-serif; --mono: "JetBrains Mono", ui-monospace, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--display); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  .bar { position: sticky; top: 0; z-index: 10; height: 52px; display: flex; border-bottom: 1px solid var(--ink); background: var(--paper); }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 18px; border-right: 1px solid var(--ink); font-weight: 700; font-size: 19px; letter-spacing: -.02em; }
+  .bar nav { display: flex; margin-left: auto; }
+  .bar nav a { display: flex; align-items: center; padding: 0 18px; border-left: 1px solid var(--ink); font: 500 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; text-decoration: none; }
+  .bar nav a.cta { background: var(--accent); font: 600 15px var(--display); letter-spacing: 0; text-transform: none; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 28px; }
+  .label { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .hero { padding: 72px 0 40px; text-align: center; }
+  .hero h1 { font-size: clamp(56px, 9vw, 132px); line-height: .92; letter-spacing: -.05em; font-weight: 600; margin: 22px 0 0; }
+  .hero h1 em { font-style: normal; background: var(--accent); padding: 0 .08em; }
+  .hero p { font-size: 22px; line-height: 1.45; color: var(--ink-2); max-width: 760px; margin: 28px auto 0; letter-spacing: -.01em; }
+  .links { display: flex; justify-content: center; flex-wrap: wrap; gap: 26px; margin-top: 38px; }
+  .links a { font-size: 26px; font-weight: 600; letter-spacing: -.02em; text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 6px; }
+  .small-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; margin-top: 18px; font: 12px var(--mono); }
+  .win { background: var(--card); border: 1px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); }
+  .win > header { display: flex; justify-content: space-between; background: var(--ink); color: var(--paper); padding: 7px 12px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .win > header span:last-child { color: #9c9c94; }
+  .shot { margin: 30px 0 0; }
+  .shot img { display: block; width: 100%; }
+  .ticker { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--ink); margin-top: 56px; background: var(--card); }
+  .ticker div { padding: 18px 20px; border-right: 1px solid var(--line); }
+  .ticker div:last-child { border-right: 0; }
+  .ticker b { display: block; font-size: 44px; letter-spacing: -.04em; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+  .ticker span { font: 500 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  section.block { padding: 96px 0 0; }
+  h2 { font-size: clamp(40px, 5.5vw, 76px); line-height: .98; letter-spacing: -.045em; font-weight: 600; margin: 14px 0 0; max-width: 980px; }
+  .lead { font-size: 21px; line-height: 1.5; color: var(--ink-2); max-width: 760px; margin-top: 22px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin-top: 44px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 44px; }
+  .card { padding: 22px; }
+  .card .big { font-size: 84px; font-weight: 600; letter-spacing: -.05em; line-height: .95; }
+  .card h3 { font-size: 22px; letter-spacing: -.02em; margin: 12px 0 8px; }
+  .card p { font-size: 16px; line-height: 1.5; color: var(--ink-2); margin: 0; }
+  code { font: .9em var(--mono); background: #e9e9e2; padding: 1px 6px; }
+  .graph { position: relative; height: 380px; margin-top: 44px; }
+  .graph svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .node { position: absolute; width: 190px; background: var(--card); border: 1px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
+  .node header { background: var(--ink); color: var(--paper); font: 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 5px 9px; }
+  .node div { padding: 10px; font: 12px/1.5 var(--mono); color: var(--ink-2); }
+  .node div b { display: block; font: 600 18px var(--display); letter-spacing: -.02em; color: var(--ink); margin-bottom: 2px; }
+  .node.hot { background: var(--accent); } .node.soda { background: #ffe8de; }
+  table { width: 100%; border-collapse: collapse; font: 13px var(--mono); }
+  td, th { text-align: left; padding: 11px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+  th { font: 500 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border-top: 0; }
+  .pill { display: inline-block; font: 700 11px var(--mono); letter-spacing: .1em; padding: 4px 8px; border: 1px solid currentColor; }
+  .p-ok { color: var(--ok); background: #e9f7ef; } .p-warn { color: #a26f00; background: #fdf6e0; } .p-bad { color: var(--bad); background: #fdecec; }
+  footer { margin-top: 110px; border-top: 1px solid var(--ink); padding: 34px 0 60px; }
+  footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; font: 12px var(--mono); color: var(--ink-2); }
+  .giant { font-size: clamp(80px, 18vw, 260px); font-weight: 600; letter-spacing: -.07em; line-height: .8; margin: 90px 0 0; }
+  @media (max-width: 860px) { .grid3, .grid2, .ticker { grid-template-columns: 1fr 1fr; } .graph { display: none; } .bar nav a:not(.cta) { display: none; } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="brand"><svg width="22" height="22" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="none" stroke="#111" stroke-width="3"/><path d="M7 7l18 18M25 7L7 25" stroke="#111" stroke-width="3"/></svg>Spoke</div>
+  <nav>
+    <a href="#problem">Problem</a><a href="#how">How it works</a><a href="#sodabase">Sodabase</a>
+    <a href="https://github.com/ParasAdlakha/spoke">GitHub</a>
+    <a class="cta" href="app/">Open the live app ↗</a>
+  </nav>
+</div>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="label">Supabase + Sodabase + BuilderBase NYC Hackathon · 4 November 2026</div>
+    <h1>Live Citi Bike,<br>checked before<br>it's <em>trusted.</em></h1>
+    <p>Spoke pulls the Citi Bike feed into Supabase every minute with pg_cron and an edge function, quarantines the rows that are wrong, and won't answer a rider from data Sodabase can't vouch for.</p>
+    <div class="links">
+      <a href="app/">Open the live app</a>
+      <a href="video/Spoke-demo-2min.mp4">Watch the 2-min demo</a>
+      <a href="slides/Spoke-slides.pdf">Slides</a>
+    </div>
+    <div class="small-links">
+      <a href="video/Spoke-pitch-3min.mp4">3-min pitch</a> · <a href="video/Spoke-demo.mp4">captioned demo</a> · <a href="slides/Spoke-slides.pptx">PowerPoint</a> · <a href="market-brief.html">market brief</a> · <a href="https://github.com/ParasAdlakha/spoke">source</a> · <a href="app/#health">data health</a>
+    </div>
+  </div>
+
+  <div class="win shot"><header><span>spoke · app</span><span>live on supabase</span></header><img src="img/answer.png" alt="The Spoke app: a map of live Citi Bike stations with a trust-gated answer"></div>
+
+  <div class="ticker">
+    <div><b id="t-bikes">32,632</b><span>bikes on the network now</span></div>
+    <div><b id="t-stations">2,457</b><span>stations live</span></div>
+    <div><b id="t-runs">—</b><span>ingest runs so far</span></div>
+    <div><b id="t-q">63</b><span>stations quarantined</span></div>
+  </div>
+
+  <section class="block" id="problem">
+    <div class="label">01 · The problem</div>
+    <h2>The app said three bikes. The dock was empty.</h2>
+    <p class="lead">Citi Bike's public feed powers hundreds of apps: about 2,500 stations and a record 44.3 million trips in 2024. It's good data, but not clean data. One pull on 4 November, before we wrote any app code:</p>
+    <div class="grid3">
+      <div class="win card"><div class="big" style="color:var(--bad)">48</div><h3>stations last reported in 1970</h3><p><code>last_reported: 86400</code> is a placeholder for 2 January 1970. Pass it through and every freshness check breaks.</p></div>
+      <div class="win card"><div class="big" style="color:#a26f00">9</div><h3>docks over capacity</h3><p>"31 bikes + docks at a 22-dock station." Counts that can't physically be true.</p></div>
+      <div class="win card"><div class="big">5</div><h3>"installed", silent for a day</h3><p>Marked open, with nothing reported in over 24 hours. Is the dock empty, or is the data dead?</p></div>
+    </div>
+  </section>
+
+  <section class="block" id="how">
+    <div class="label">02 · How it works · all Supabase</div>
+    <h2>A database with two small functions on top.</h2>
+    <div class="graph" id="graph">
+      <div class="node" style="left:0;top:20px"><header>source</header><div><b>Citi Bike GBFS</b>public · ttl 60 s<br>2,518 stations</div></div>
+      <div class="node hot" style="left:0;top:220px"><header>pg_cron + pg_net</header><div><b>every minute</b>secret from Vault<br>3 jobs</div></div>
+      <div class="node" style="left:26%;top:120px"><header>edge function</header><div><b>ingest</b>10-rule contract<br>one transaction</div></div>
+      <div class="node" style="left:52%;top:20px"><header>postgres · rls</header><div><b>live tables</b>station_status<br>system_pulse · ingest_runs</div></div>
+      <div class="node" style="left:52%;top:220px"><header>quarantine</header><div><b>rejected_records</b>one row per station<br>and reason</div></div>
+      <div class="node soda" style="right:0;top:20px"><header>sodabase</header><div><b>watches</b>stale · empty · wrong<br>read-only role</div></div>
+      <div class="node" style="right:0;top:220px"><header>edge function</header><div><b>ask</b>trust gate →<br>cited answer</div></div>
+      <svg id="wires"></svg>
+    </div>
+    <div class="grid3" style="margin-top:30px">
+      <div class="win card"><span class="pill p-ok">TRUSTED</span><h3>Cited answer</h3><p>The 5 nearest stations, live counts and the 60-minute trend from <code>status_snapshots</code>, each cited as [n].</p></div>
+      <div class="win card"><span class="pill p-warn">CAVEATED</span><h3>Answer, with a warning</h3><p>A failed run in the last 15 minutes, a partial batch, or a slightly old table: Spoke answers and says why.</p></div>
+      <div class="win card"><span class="pill p-bad">UNTRUSTED</span><h3>"I won't guess."</h3><p>Live data over 3 minutes old, no runs, or Sodabase says untrusted: no model call, just the reasons.</p></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="label">03 · The data contract</div>
+    <h2>Bad rows never reach the live tables.</h2>
+    <div class="grid2">
+      <div class="win"><header><span>validate.ts</span><span>tested · 15/15</span></header>
+        <table>
+          <tr><th>rule</th><th>rejects</th></tr>
+          <tr><td>bogus_timestamp</td><td>reported before Citi Bike existed (May 2013)</td></tr>
+          <tr><td>over_capacity</td><td>bikes + docks &gt; capacity + 2</td></tr>
+          <tr><td>future_timestamp</td><td>more than 5 min ahead</td></tr>
+          <tr><td>unknown_station</td><td>status without a station</td></tr>
+          <tr><td>invalid_count · ebikes_exceed_bikes</td><td>negative, fractional, impossible</td></tr>
+          <tr><td>invalid_flag · duplicate_station</td><td>flags not 0/1, ids twice</td></tr>
+          <tr><td>outside_service_area · missing_name</td><td>station list basics</td></tr>
+        </table>
+      </div>
+      <div class="win"><header><span>select * from rejected_records</span><span>live</span></header>
+        <img src="img/quarantine-table.png" alt="Quarantined records" style="width:100%;display:block;image-rendering:auto">
+        <div style="padding:16px;font:13px/1.6 var(--mono);color:var(--ink-2)">Postgres <code>CHECK</code> constraints repeat the critical rules. Every run, even a failed one, writes an <code>ingest_runs</code> row, so a silent pipeline shows up as stale data.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="sodabase">
+    <div class="label">04 · Built for Sodabase</div>
+    <h2>"Normal" is easy to learn. A problem is easy to see.</h2>
+    <div class="grid3">
+      <div class="win card"><span class="pill p-ok">STALE</span><h3>A heartbeat every minute</h3><p><code>ingest_runs</code> and <code>system_pulse</code> insert one row a minute; ~1,800 stations re-report in <code>station_status</code>. A stopped cron shows within minutes.</p></div>
+      <div class="win card"><span class="pill p-ok">EMPTY</span><h3>Nothing is ever deleted</h3><p>History is insert-only; live tables are upserted in place. A row-count drop is always a real problem.</p></div>
+      <div class="win card"><span class="pill p-ok">WRONG</span><h3>Contract + constraints</h3><p>Schema changes only through migrations. Bad values are blocked twice: in TypeScript, then in Postgres.</p></div>
+    </div>
+    <div class="win" style="margin-top:26px;background:var(--accent)"><div style="padding:22px;font-size:20px;line-height:1.45;letter-spacing:-.01em"><b>Sodabase closes the loop.</b> Every answer calls Sodabase's MCP <code>check_trust</code> on <code>public.station_status</code>. If Sodabase says untrusted, Spoke won't answer, however healthy its own pipeline looks.</div></div>
+  </section>
+
+  <section class="block">
+    <div class="label">05 · Team</div>
+    <h2>Paras Adlakha &amp; Harshita Adlakha</h2>
+    <p class="lead"><a href="https://github.com/ParasAdlakha/spoke">github.com/ParasAdlakha/spoke</a> · mirror at <a href="https://github.com/HarshitaAdlakha/spoke">github.com/HarshitaAdlakha/spoke</a></p>
+  </section>
+
+  <div class="giant">Spoke.</div>
+</div>
+
+<footer><div class="wrap"><span>Station data © Citi Bike / Lyft, Citi Bike Data License Agreement · Map © OpenStreetMap contributors</span><span>MIT · 2026</span></div></footer>
+
+<script src="app/config.js"></script>
+<script>
+// Wires between the pipeline nodes (Weave-style curves).
+function wires() {
+  const g = document.getElementById('graph'); if (!g || !g.offsetWidth) return;
+  const n = [...g.querySelectorAll('.node')].map((el) => ({ x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight }));
+  const R = (i) => ({ x: n[i].x + n[i].w, y: n[i].y + n[i].h / 2 }), L = (i) => ({ x: n[i].x, y: n[i].y + n[i].h / 2 });
+  const c = (a, b, d) => { const m = (a.x + b.x) / 2;
+    return `<path d="M${a.x},${a.y} C${m},${a.y} ${m},${b.y} ${b.x},${b.y}" fill="none" stroke="#111" stroke-width="1.4" ${d ? 'stroke-dasharray="5 5"' : ''}/><circle cx="${a.x}" cy="${a.y}" r="4" fill="#111"/><circle cx="${b.x}" cy="${b.y}" r="4" fill="#fbfbf8" stroke="#111" stroke-width="1.4"/>`; };
+  document.getElementById('wires').innerHTML = c(R(0), L(2)) + c(R(1), L(2)) + c(R(2), L(3)) + c(R(2), L(4)) + c(R(3), L(5), true) + c(R(3), L(6)) + `<path d="M${n[5].x + n[5].w / 2},${n[5].y + n[5].h} L${n[6].x + n[6].w / 2},${n[6].y}" stroke="#111" stroke-width="1.4" stroke-dasharray="5 5"/>`;
+}
+addEventListener('load', wires); addEventListener('resize', wires);
+// Live numbers from the same Supabase project (read-only, publishable key).
+(async () => {
+  try {
+    const r = await fetch(`${SPOKE.SUPABASE_URL}/rest/v1/rpc/health_summary`, { method: 'POST', headers: { apikey: SPOKE.SUPABASE_KEY, 'content-type': 'application/json' }, body: '{}' });
+    const h = await r.json(); const f = (x) => Number(x).toLocaleString('en-US');
+    const p = h.pulse.at(-1); if (p) { document.getElementById('t-bikes').textContent = f(p.bikes); document.getElementById('t-stations').textContent = f(p.stations_reporting); }
+    document.getElementById('t-runs').textContent = f(h.counts.runs);
+    document.getElementById('t-q').textContent = f(h.rejects.reduce((a, x) => a + Number(x.stations), 0));
+  } catch {}
+})();
+</script>
+</body>
+</html>
