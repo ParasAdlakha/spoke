@@ -38,13 +38,50 @@ async function rpc(
   return { result: msg.result, session: sid };
 }
 
+function parseObject(text: string): Record<string, any> | null {
+  try {
+    const v = JSON.parse(text);
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+// Sodabase replies with JSON: check_trust has `verdict`, data_trust has `status`.
+// Read only those fields, because the prose around them can mention any verdict
+// word. Plain text replies fall back to a word match.
 export function parseVerdict(text: string): SodabaseVerdict['verdict'] {
+  const obj = parseObject(text);
+  if (obj) {
+    const v = String(obj.verdict ?? obj.status ?? '').toLowerCase();
+    return v === 'trusted' || v === 'caveated' || v === 'untrusted' ? v : 'unknown';
+  }
   const t = text.toLowerCase();
   // Order matters: "untrusted" contains "trusted".
   if (/\buntrusted\b/.test(t)) return 'untrusted';
   if (/\bcaveated\b/.test(t)) return 'caveated';
   if (/\btrusted\b/.test(t)) return 'trusted';
   return 'unknown';
+}
+
+const describeFinding = (f: any): string =>
+  typeof f === 'string' ? f : String(f?.summary ?? f?.message ?? f?.description ?? f?.title ?? JSON.stringify(f));
+
+// A short, readable reason: the reply's evidence or findings, never its
+// standard "read-only" note. These lines can reach riders in a refusal.
+export function summarize(text: string): string {
+  const obj = parseObject(text);
+  let out = text;
+  if (obj) {
+    const evidence: string[] = Array.isArray(obj.evidence) ? obj.evidence.map(String) : [];
+    const signal = evidence.filter((e) => !/no monitor history|not measured|^basis:/i.test(e));
+    const findings: string[] = Array.isArray(obj.findings) ? obj.findings.map(describeFinding) : [];
+    const lines = [...(signal.length ? signal : evidence), ...findings];
+    if (lines.length) out = lines.join('; ');
+    else if (Array.isArray(obj.findings)) out = `no findings${obj.as_of ? ` (as of ${obj.as_of})` : ''}`;
+    else out = '';
+  }
+  return out.replace(/\s+/g, ' ').trim().slice(0, 280) || 'no detail returned';
 }
 
 export async function sodabaseTrust(token: string | undefined, dataset: string, timeoutMs = 6000): Promise<SodabaseVerdict> {
@@ -59,22 +96,29 @@ export async function sodabaseTrust(token: string | undefined, dataset: string, 
     await rpc(token, { jsonrpc: '2.0', method: 'notifications/initialized' }, init.session, ctl.signal);
     const tool = async (id: number, name: string, args: Record<string, unknown>) => {
       const call = await rpc(token, { jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } }, init.session, ctl.signal);
+      // A failed tool call says nothing about the data, so it must not yield a verdict.
+      if (call.result?.isError) return '';
       return (call.result?.content ?? []).map((c: any) => (c.type === 'text' ? c.text : '')).join('\n').trim();
     };
-    // check_trust takes a dataset name; if Sodabase doesn't recognise our form
-    // of it, ask data_trust about the bare table name instead.
-    let text = await tool(2, 'check_trust', { dataset });
-    let verdict = parseVerdict(text);
-    if (verdict === 'unknown') {
-      const table = dataset.split('.').pop()!;
-      const alt = await tool(3, 'data_trust', { table }).catch(() => '');
-      if (parseVerdict(alt) !== 'unknown') { text = alt; verdict = parseVerdict(alt); }
+    // check_trust is the monitor's verdict. It is `unknown` until monitors have
+    // history, so data_trust (the latest scan, by bare table name) is the fallback.
+    // Both start together to save a round trip; data_trust is only waited for when
+    // it's needed, and the finally block cancels it otherwise.
+    const table = dataset.split('.').pop()!;
+    const altCall = tool(3, 'data_trust', { table }).catch(() => '');
+    const text = await tool(2, 'check_trust', { dataset });
+    const verdict = parseVerdict(text);
+    if (verdict !== 'unknown') return { verdict, summary: summarize(text), source: 'sodabase' };
+    const alt = await altCall;
+    const altVerdict = parseVerdict(alt);
+    if (altVerdict !== 'unknown') {
+      return { verdict: altVerdict, summary: `no monitor verdict yet; latest scan: ${summarize(alt)}`.slice(0, 280), source: 'sodabase' };
     }
-    const summary = text.replace(/\s+/g, ' ').slice(0, 280) || 'no detail returned';
-    return { verdict, summary, source: 'sodabase' };
+    return { verdict, summary: summarize(text), source: 'sodabase' };
   } catch (e) {
     return { verdict: 'unknown', summary: `Sodabase unavailable: ${(e as Error).message}`, source: 'error' };
   } finally {
     clearTimeout(timer);
+    ctl.abort(); // cancels a data_trust call that is still in flight
   }
 }
