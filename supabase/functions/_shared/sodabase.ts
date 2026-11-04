@@ -57,14 +57,19 @@ export async function sodabaseTrust(token: string | undefined, dataset: string, 
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'spoke', version: '1.0.0' } },
     }, null, ctl.signal);
     await rpc(token, { jsonrpc: '2.0', method: 'notifications/initialized' }, init.session, ctl.signal);
-    const call = await rpc(token, {
-      jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'check_trust', arguments: { dataset } },
-    }, init.session, ctl.signal);
-    const text = (call.result?.content ?? [])
-      .map((c: any) => (c.type === 'text' ? c.text : ''))
-      .join('\n')
-      .trim();
-    const verdict = parseVerdict(text);
+    const tool = async (id: number, name: string, args: Record<string, unknown>) => {
+      const call = await rpc(token, { jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } }, init.session, ctl.signal);
+      return (call.result?.content ?? []).map((c: any) => (c.type === 'text' ? c.text : '')).join('\n').trim();
+    };
+    // check_trust takes a dataset name; if Sodabase doesn't recognise our form
+    // of it, ask data_trust about the bare table name instead.
+    let text = await tool(2, 'check_trust', { dataset });
+    let verdict = parseVerdict(text);
+    if (verdict === 'unknown') {
+      const table = dataset.split('.').pop()!;
+      const alt = await tool(3, 'data_trust', { table }).catch(() => '');
+      if (parseVerdict(alt) !== 'unknown') { text = alt; verdict = parseVerdict(alt); }
+    }
     const summary = text.replace(/\s+/g, ' ').slice(0, 280) || 'no detail returned';
     return { verdict, summary, source: 'sodabase' };
   } catch (e) {

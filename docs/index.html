@@ -35,6 +35,9 @@
   .win { background: var(--card); border: 1px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); }
   .win > header { display: flex; justify-content: space-between; background: var(--ink); color: var(--paper); padding: 7px 12px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
   .win > header span:last-child { color: #9c9c94; }
+  .vid-tabs { display: flex; gap: 4px; }
+  .vid-tabs button { border: 1px solid #555; background: transparent; color: #c9c9c1; font: 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; cursor: pointer; }
+  .vid-tabs button.on, .vid-tabs button:hover { background: var(--accent); color: var(--ink); border-color: var(--accent); }
   .shot { margin: 30px 0 0; }
   .shot img { display: block; width: 100%; }
   .ticker { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--ink); margin-top: 56px; background: var(--card); }
@@ -87,7 +90,7 @@
     <p>Spoke pulls the Citi Bike feed into Supabase every minute with pg_cron and an edge function, quarantines the rows that are wrong, and won't answer a rider from data Sodabase can't vouch for.</p>
     <div class="links">
       <a href="app/">Open the live app</a>
-      <a href="video/Spoke-demo-2min.mp4">Watch the 2-min demo</a>
+      <a href="#watch">Watch the demo</a>
       <a href="slides/Spoke-slides.pdf">Slides</a>
     </div>
     <div class="small-links">
@@ -96,6 +99,19 @@
   </div>
 
   <div class="win shot"><header><span>spoke · app</span><span>live on supabase</span></header><img src="img/answer.png" alt="The Spoke app: a map of live Citi Bike stations with a trust-gated answer"></div>
+
+  <section class="block" id="watch" style="padding-top:72px">
+    <div class="label">Watch · a real session on the live project, sound on</div>
+    <h2 style="font-size:clamp(36px,4.5vw,60px)">See it check before it answers.</h2>
+    <div class="win" style="margin-top:30px">
+      <header><span id="vid-title">spoke-demo-2min.mp4 · narrated · 1:22</span><span class="vid-tabs">
+        <button data-v="video/Spoke-demo-2min.mp4" data-t="spoke-demo-2min.mp4 · narrated · 1:22" class="on">demo</button>
+        <button data-v="video/Spoke-pitch-3min.mp4" data-t="spoke-pitch-3min.mp4 · pitch with slides · 2:20">pitch</button>
+        <button data-v="video/Spoke-demo.mp4" data-t="spoke-demo.mp4 · captioned, silent · 0:44">captioned</button>
+      </span></header>
+      <video id="vid" controls preload="metadata" playsinline poster="slides/s1.png" src="video/Spoke-demo-2min.mp4" style="display:block;width:100%;background:#111"></video>
+    </div>
+  </section>
 
   <div class="ticker">
     <div><b id="t-bikes">32,632</b><span>bikes on the network now</span></div>
@@ -192,6 +208,12 @@ function wires() {
   document.getElementById('wires').innerHTML = c(R(0), L(2)) + c(R(1), L(2)) + c(R(2), L(3)) + c(R(2), L(4)) + c(R(3), L(5), true) + c(R(3), L(6)) + `<path d="M${n[5].x + n[5].w / 2},${n[5].y + n[5].h} L${n[6].x + n[6].w / 2},${n[6].y}" stroke="#111" stroke-width="1.4" stroke-dasharray="5 5"/>`;
 }
 addEventListener('load', wires); addEventListener('resize', wires);
+// Video switcher.
+document.querySelectorAll('.vid-tabs button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('.vid-tabs button').forEach((x) => x.classList.toggle('on', x === b));
+  const v = document.getElementById('vid'); v.src = b.dataset.v; v.play().catch(() => {});
+  document.getElementById('vid-title').textContent = b.dataset.t;
+});
 // Live numbers from the same Supabase project (read-only, publishable key).
 (async () => {
   try {
