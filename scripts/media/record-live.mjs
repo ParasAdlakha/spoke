@@ -4,6 +4,7 @@
 //   node record-live.mjs <app url> <work dir> <img dir>
 import puppeteer from 'puppeteer-core';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import path from 'node:path';
 
 const [base, work, img] = process.argv.slice(2);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -22,7 +23,7 @@ const cdp = await page.createCDPSession();
 cdp.on('Page.screencastFrame', ({ data, metadata, sessionId }) => {
   const f = `${work}/frames/${String(frames.length).padStart(6, '0')}.jpg`;
   writeFileSync(f, Buffer.from(data, 'base64'));
-  frames.push({ f, ts: metadata.timestamp * 1000 });
+  frames.push({ f: path.resolve(f).split(path.sep).join('/'), ts: metadata.timestamp * 1000 }); // absolute: ffmpeg lists resolve relative to themselves
   cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
 });
 // Chrome only sends frames on repaint: a near-invisible animated pixel keeps them flowing.

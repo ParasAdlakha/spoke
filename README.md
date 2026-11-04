@@ -16,7 +16,7 @@ Built by **Paras Adlakha** and **Harshita Adlakha** for the **Supabase + Sodabas
 
 *Data health: the pipeline as a graph with live counts, the trust gate the answer was checked against, and one `system_pulse` point per minute.*
 
-**Contents:** [The hackathon](#the-hackathon) · [The problem](#the-problem) · [What Spoke does](#what-spoke-does) · [Architecture](#architecture) · [The data contract](#the-data-contract) · [The trust gate](#the-trust-gate) · [Built for Sodabase](#built-for-sodabase) · [Supabase features used](#supabase-features-used) · [Real numbers](#real-numbers) · [Tests](#tests) · [Run it yourself](#run-it-yourself) · [Repository layout](#repository-layout) · [What we learned](#what-we-learned) · [Limitations and roadmap](#limitations-and-roadmap) · [Team](#team) · [References](#references)
+**Contents:** [The hackathon](#the-hackathon) · [The problem](#the-problem) · [What Spoke does](#what-spoke-does) · [Architecture](#architecture) · [How one minute and one answer are handled](#how-one-minute-and-one-answer-are-handled) · [The data contract](#the-data-contract) · [The trust gate](#the-trust-gate) · [Built for Sodabase](#built-for-sodabase) · [Read-only by construction](#read-only-by-construction) · [Guardrails](#guardrails) · [Supabase features used](#supabase-features-used) · [Real numbers](#real-numbers) · [Tests](#tests) · [Run it yourself](#run-it-yourself) · [Repository layout](#repository-layout) · [What we learned](#what-we-learned) · [Limitations and roadmap](#limitations-and-roadmap) · [Team](#team) · [References](#references)
 
 ---
 
@@ -84,6 +84,25 @@ flowchart LR
 
 ---
 
+### The functions
+
+Everything Spoke does is one of these. The browser can call only the four read-only RPCs and `ask`.
+
+| Function | Kind | What it does | Guardrail |
+|---|---|---|---|
+| `ingest?job=status` | Edge function, pg_cron every minute | Fetch `station_status`, validate, apply in one transaction | Rejects any call without the `x-spoke-cron` secret from Vault |
+| `ingest?job=stations` | Edge function, pg_cron hourly | Fetch `station_information`, validate, upsert `stations` | Same secret; runs automatically on the first status ingest |
+| `ask` | Edge function, public | Trust gate → nearest stations → cited answer, logged | Question capped at 300 chars; no model call when untrusted |
+| `apply_status` / `apply_stations` | SQL, security definer | Upsert clean rows, record rejects, write the audit row and pulse | `execute` revoked from `anon` and `authenticated` |
+| `record_rejects` | SQL, security definer | Upsert the quarantine, counting repeats | Revoked from the browser |
+| `take_snapshot` | SQL, pg_cron every 10 min | Copy live status of installed stations into history | Revoked from the browser |
+| `call_ingest` | SQL, pg_cron | `pg_net` POST to `ingest`, URL and secret read from Vault | Revoked from the browser |
+| `live_stations` / `health_summary` | SQL RPC, public | Everything the map and the Data health view show, in one call | Read-only, `stable` |
+| `nearest_stations` | SQL RPC, public | 5 nearest installed stations with live counts and 60-minute trend | Read-only; limit clamped to 1–20 |
+| `trust_metrics` | SQL RPC, public | Raw freshness and run-health numbers for the gate | Read-only |
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -134,6 +153,40 @@ flowchart TB
 ```
 
 **Why so little code?** Spoke is a database with two small functions on top. The cron schedule, the secret store, the HTTP client, the history, the access rules and the read API are all Supabase. The only application logic is the contract and the trust gate, and both are pure TypeScript shared between the Deno functions and the Node tests.
+
+---
+
+## How one minute and one answer are handled
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as pg_cron
+    participant V as Vault
+    participant I as ingest (edge fn)
+    participant G as Citi Bike GBFS
+    participant DB as Postgres
+    participant S as Sodabase
+    actor R as Rider
+    participant A as ask (edge fn)
+
+    C->>V: read project URL + cron secret
+    C->>I: pg_net POST /ingest?job=status (x-spoke-cron)
+    I->>DB: station_capacities()
+    I->>G: GET station_status.json
+    G-->>I: 2,518 records, feed ~60-90 s old
+    Note over I: validate.ts: 10 rules → 2,461 clean, 57 rejected
+    I->>DB: apply_status(rows, rejects, run) in one transaction
+    Note over DB: station_status (~1,800 changed) · rejected_records · ingest_runs · system_pulse
+    S-->>DB: read-only role watches freshness and volume
+    R->>A: "Where can I grab an e-bike near here?" + lat/lon
+    A->>DB: trust_metrics()
+    A->>S: MCP check_trust(public.station_status)
+    Note over A: worst of pipeline and Sodabase → trusted
+    A->>DB: nearest_stations(lat, lon, 5)
+    A-->>R: "Go to W 42 St & 6 Ave [1]…" + verdict + stations
+    A->>DB: insert ai_answers (verdict, trust, model, latency)
+```
 
 ---
 
@@ -192,6 +245,29 @@ Sodabase connects with its own `soda_readonly` role and never writes. Spoke read
 ```bash
 claude mcp add --transport http sodabase https://sodabase.io/mcp
 ```
+
+---
+
+## Read-only by construction
+
+| Claim | Where it is enforced |
+|---|---|
+| The browser can't write anything | Row-level security is on for all 7 tables with `select`-only policies; the app uses the publishable key ([schema](supabase/migrations/20261104000001_spoke_schema.sql)) |
+| The browser can't trigger an ingest or touch the quarantine | `execute` on `apply_status`, `apply_stations`, `record_rejects`, `take_snapshot`, `call_ingest` and `station_capacities` is revoked from `anon` and `authenticated` |
+| Only pg_cron can run `ingest` | The function checks `x-spoke-cron` against `SPOKE_CRON_SECRET`; pg_cron reads the same secret from Vault. Neither is in the repo |
+| Sodabase never writes | Sodabase connects as its own `soda_readonly` role, read-only at the transaction level |
+| Questions and answers stay private | `ai_answers` has RLS with no `select` policy; only the Data health summary (question, verdict, latency) is exposed |
+| No secrets in git | `.env` and `supabase/.temp/` are ignored; `docs/app/config.js` holds only the URL and the publishable key, which RLS limits to reads |
+
+## Guardrails
+
+- **Bad data never reaches the live tables.** Ten contract rules in TypeScript, repeated as Postgres `CHECK` constraints for the critical ones.
+- **A failed run is never silent.** Every run writes one `ingest_runs` row, success or failure; no runs in 15 minutes makes the data untrusted.
+- **The model only phrases facts.** It gets a facts block built from SQL and must cite stations as [n]; it is told never to invent numbers. With no key, or if the model call fails, a fixed template answers from the same facts.
+- **No model call on untrusted data.** The refusal is generated in code, with the reasons.
+- **Nothing is deleted.** No `delete`, `truncate` or `drop` runs at runtime, so a row-count drop always means something real.
+- **Inputs are bounded.** Questions are capped at 300 characters; `nearest_stations` clamps its limit to 1–20; coordinates fall back to Bryant Park if missing.
+- **The UI escapes everything it renders,** including station names from the feed and questions from other users.
 
 ---
 

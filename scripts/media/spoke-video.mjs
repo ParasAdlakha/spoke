@@ -103,7 +103,7 @@ for (const [i, s] of steps.entries()) {
     const extra = want - raw / speed;
     lines.push(`file '${shown.at(-1).f.replace(/\\/g, '/')}'\nduration ${Math.max(0.04, extra).toFixed(4)}`, `file '${shown.at(-1).f.replace(/\\/g, '/')}'`);
     writeFileSync(`${work}/list-${i}.txt`, lines.join('\n'));
-    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', `${work}/list-${i}.txt`, '-i', ov,
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', `${work}/list-${i}.txt`, '-loop', '1', '-i', ov,
       '-filter_complex', '[0:v]fps=30,scale=1920:1080:flags=lanczos,format=yuv420p[v];[v][1:v]overlay=0:0,format=yuv420p', '-t', want.toFixed(2), '-c:v', 'libx264', '-crf', '20', '-preset', 'medium', clip]);
     console.log(`${s.from}→${s.to}: ${raw.toFixed(0)}s real → ${want.toFixed(1)}s (${speed.toFixed(1)}×)`);
   }

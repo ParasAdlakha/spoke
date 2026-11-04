@@ -63,9 +63,9 @@ All three are cut from one real recorded session against the live Supabase proje
 
 | File | Length | Use |
 |---|---|---|
-| `docs/video/Spoke-demo-2min.mp4` | ~2 min | Narrated walkthrough: map, two trust-gated answers, data health, quarantine |
-| `docs/video/Spoke-pitch-3min.mp4` | ~3 min | Problem → demo → architecture → Sodabase → close, with slides |
-| `docs/video/Spoke-demo.mp4` | ~1 min | Silent, captioned, for social feeds |
+| `docs/video/Spoke-demo-2min.mp4` | 1:22 | Narrated walkthrough: map, two trust-gated answers, data health, quarantine |
+| `docs/video/Spoke-pitch-3min.mp4` | 2:20 | Problem → demo → architecture → Sodabase → close, with slides |
+| `docs/video/Spoke-demo.mp4` | 0:44 | Silent, captioned, for social feeds |
 
 ---
 
