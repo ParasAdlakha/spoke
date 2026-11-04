@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { combine, pipelineVerdict, type TrustMetrics, type SodabaseVerdict } from '../supabase/functions/_shared/trust.ts';
 import { parseVerdict, sodabaseTrust, summarize } from '../supabase/functions/_shared/sodabase.ts';
-import { templateAnswer, refusal, factsBlock, type NearStation } from '../supabase/functions/_shared/answer.ts';
+import { callModel, templateAnswer, refusal, factsBlock, type NearStation } from '../supabase/functions/_shared/answer.ts';
 
 const healthy: TrustMetrics = {
   status_age_s: 20, runs_15m: 15, failed_runs_15m: 0, stations_total: 2518, stations_installed: 2464,
@@ -128,6 +128,23 @@ test('template answer skips empty stations and warns about draining ones', () =>
   assert.match(a, /Broadway & W 41 St \[2\]/);
   assert.match(a, /draining at -6/);
   assert.match(templateAnswer('where can I dock', near, t), /W 41 St & 8 Ave \[1\].*40 free docks/);
+});
+
+test('OpenAI calls use minimal reasoning only on models that accept it', async () => {
+  const original = globalThis.fetch;
+  const bodies: any[] = [];
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)));
+    return Response.json({ choices: [{ message: { content: ' Dock at [1]. ' } }] });
+  }) as typeof fetch;
+  const envFor = (vars: Record<string, string>) => (k: string) => vars[k];
+  try {
+    const r = await callModel('facts', 'q', envFor({ OPENAI_API_KEY: 'k' }));
+    assert.deepEqual(r, { text: 'Dock at [1].', model: 'gpt-5-mini' });
+    assert.equal(bodies[0].reasoning_effort, 'minimal');
+    await callModel('facts', 'q', envFor({ OPENAI_API_KEY: 'k', SPOKE_MODEL: 'gpt-4o-mini' }));
+    assert.equal('reasoning_effort' in bodies[1], false);
+  } finally { globalThis.fetch = original; }
 });
 
 test('refusal names the reason and the facts block carries the verdict', () => {

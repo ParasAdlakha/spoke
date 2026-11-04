@@ -39,7 +39,8 @@ export const SYSTEM_PROMPT = [
   'You are Spoke, a Citi Bike assistant for New York. Answer in 2 to 4 short sentences.',
   'Use ONLY the facts block. Name stations exactly and cite them as [n].',
   'Give a concrete recommendation (which station, bike or dock, e-bike or classic).',
-  'If a station is draining (negative trend) and has few bikes, warn that it may be empty on arrival.',
+  'For getting a bike: if a station is draining (negative trend) and has few bikes, warn that it may be empty on arrival.',
+  'For docking: choose by free docks and ignore bike counts. A positive trend means docks are filling up, so warn if such a station has few free docks; a negative trend means docks are opening up.',
   'If the verdict is caveated, say briefly why the data may be off. Never invent numbers.',
 ].join(' ');
 
@@ -85,7 +86,14 @@ export async function callModel(facts: string, question: string, env: (k: string
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${openai}` },
-      body: JSON.stringify({ model, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: user }] }),
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: user }],
+        max_completion_tokens: 300,
+        // The answer only phrases the facts block, so it needs no deliberation:
+        // measured about 3 s at minimal against 19-34 s at the default effort.
+        ...(/^gpt-5/.test(model) ? { reasoning_effort: 'minimal' } : {}),
+      }),
     });
     if (!res.ok) throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const j = await res.json();
