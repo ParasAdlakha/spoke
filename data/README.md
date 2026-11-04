@@ -17,15 +17,15 @@ public Citi Bike feed, pulled by `pg_cron` → the `ingest` edge function.
 
 ## Where it lands
 
-| Table | Written by | Rhythm | Timestamp Sodabase watches |
-|---|---|---|---|
-| `stations` | `ingest?job=stations` | hourly at :07 | `updated_at` (moves only on real changes) |
-| `station_status` | `ingest?job=status` | every minute | `updated_at` (moves only for stations whose report changed) |
-| `status_snapshots` | `take_snapshot()` in SQL | every 10 minutes | `created_at` (insert-only) |
-| `system_pulse` | `apply_status()` | every minute | `created_at` (insert-only) |
-| `ingest_runs` | every job, including failures | every minute | `created_at` (insert-only) |
-| `rejected_records` | quarantine upsert | when the feed is wrong | `last_seen` |
-| `ai_answers` | `ask` | per question | `created_at` (insert-only) |
+| Table | Written by | Rhythm | Timestamp | Watched by Sodabase |
+|---|---|---|---|---|
+| `stations` | `ingest?job=stations` | hourly at :07 | `updated_at` (moves only on real changes) | Yes |
+| `station_status` | `ingest?job=status` | every minute | `updated_at` (moves only for stations whose report changed) | Yes |
+| `status_snapshots` | `take_snapshot()` in SQL | every 10 minutes | `created_at` (insert-only) | Yes |
+| `system_pulse` | `apply_status()` | every minute | `created_at` (insert-only) | No |
+| `ingest_runs` | every job, including failures | every minute | `created_at` (insert-only) | No |
+| `rejected_records` | quarantine upsert | when the feed is wrong | `last_seen` | Yes |
+| `ai_answers` | `ask` | per question | `created_at` (insert-only) | No |
 
 ## The data contract
 

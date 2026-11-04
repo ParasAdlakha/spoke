@@ -26,7 +26,7 @@ Copy-ready answers for the BuilderBase submission, the live demo script, and the
 
 > You walk ten minutes to a Citi Bike dock because an app said there were three bikes, and the dock is empty. The data was wrong, old, or both, and nothing told you.
 >
-> Spoke pulls Citi Bike's public feed (about 2,500 stations) into **Supabase** every minute: a **pg_cron** job calls an **edge function** through **pg_net**, with its secret in **Vault**. Every record passes a written 10-rule data contract before it lands in one transaction; the rows that fail go to a quarantine table with a human-readable reason. The feed really needs it: on the first pull, 48 stations reported a last update in 1970 and 9 reported more bikes than they have docks. Every run, even a failed one, writes an audit row, and a pure-SQL cron job snapshots history every 10 minutes for trends.
+> Spoke pulls Citi Bike's public feed (about 2,500 stations) into **Supabase** every minute: a **pg_cron** job calls an **edge function** through **pg_net**, with its secret in **Vault**. Every record passes a written 12-rule data contract before it lands in one transaction; the rows that fail go to a quarantine table with a human-readable reason. The feed really needs it: on the first pull, 48 stations reported a last update in 1970 and 9 reported more bikes than they have docks. Every run, even a failed one, writes an audit row, and a pure-SQL cron job snapshots history every 10 minutes for trends.
 >
 > Riders ask Spoke questions like "where can I grab an e-bike near here?". Before answering, a second edge function runs a **trust gate**: is the live table fresh, are the recent runs healthy, and what does **Sodabase** say about it (its MCP `check_trust` tool)? Untrusted data gets "I won't guess", with the reasons. Trusted data gets the five nearest stations, their live counts and 60-minute trend, each one cited. Every answer is logged with the verdict it was gated on.
 >
@@ -34,11 +34,66 @@ Copy-ready answers for the BuilderBase submission, the live demo script, and the
 
 **How we used Supabase:** 7 Postgres tables with `CHECK` constraints and row-level security; 3 pg_cron jobs (status every minute, stations hourly, snapshots every 10 minutes); pg_net and Vault for the cron → edge function call; 2 edge functions (`ingest`, `ask`); security-definer RPCs for the browser (`live_stations`, `health_summary`, `nearest_stations`, `trust_metrics`); the Supabase CLI for project creation, migrations, secrets and deploys; supabase-js with the publishable key.
 
-**How we used Sodabase:** Sodabase is connected to the project with its read-only role and watches the public tables for stale, empty and wrong data. The `ask` edge function calls Sodabase's MCP server (`https://sodabase.io/mcp`, `check_trust` on `public.station_status`) on every answer, and an untrusted verdict from Sodabase blocks the answer.
+**How we used Sodabase:** Sodabase is connected to the project with its read-only role and watches four tables (`stations`, `station_status`, `status_snapshots`, `rejected_records`) for stale, empty and wrong data. The `ask` edge function calls Sodabase's MCP server (`https://sodabase.io/mcp`, `check_trust` on `public.station_status`) on every answer, and an untrusted verdict from Sodabase blocks the answer.
 
 **Pre-existing components:** None. Everything was built on 4 November 2026. The media scripts (slides, screen recording, video editing) were adapted from our earlier hackathon projects.
 
 **AI coding tool:** Claude Code
+
+---
+
+## BuilderBase form, field by field
+
+Figures are from the live project at 21:03 UTC on 4 November 2026.
+
+**Project pitch**
+
+> Your app says three bikes. You walk ten minutes. The dock is empty. Spoke is live Citi Bike availability for New York that checks its data before it answers. Supabase cron jobs and an edge function pull about 2,500 stations every minute, a written data contract quarantines what's wrong, and every AI answer is gated on pipeline health plus Sodabase's trust verdict. If the data can't be trusted, Spoke says "I won't guess" instead of sending you to an empty dock.
+
+**Live Supabase app**
+
+> https://parasadlakha.github.io/spoke/app/
+
+**Code repository**
+
+> https://github.com/ParasAdlakha/spoke
+
+**Demo video (optional)**
+
+> https://parasadlakha.github.io/spoke/video/Spoke-demo-2min.mp4
+
+**Data schema and sources**
+
+> Source: Citi Bike's public GBFS 2.3 feed (station_information and station_status, about 2,518 stations, 60-second ttl, no key needed).
+>
+> Schema, 7 tables in public, all with row-level security:
+> - stations: names, location, capacity (refreshed hourly)
+> - station_status: latest validated report per station (every minute)
+> - status_snapshots: insert-only history for trends (every 10 minutes)
+> - system_pulse: one network-wide row per minute
+> - ingest_runs: one audit row per run, including failures
+> - rejected_records: quarantine, one row per feed, station and reason, with a counter
+> - ai_answers: every answer with its verdict, model and latency
+>
+> Loaded by 3 pg_cron jobs. Two call the ingest edge function through pg_net, with the secret in Vault; one is pure SQL. Details: https://github.com/ParasAdlakha/spoke/blob/main/data/README.md
+
+**Data quality approach**
+
+> We profiled the feed before writing app code: 48 stations reported a last update in 1970 and 9 reported more bikes and docks than they have space for.
+>
+> 1. Prevent: every record passes a data contract in TypeScript (12 rejection reasons, unit-tested) before it's written. Postgres CHECK constraints repeat the critical rules.
+> 2. Quarantine: failures go to rejected_records with a readable reason, for example "31 bikes + docks at a 22-dock station". The good rows in a batch are still applied. In the last hour, 84 stations were quarantined at least once.
+> 3. Audit: every run writes an ingest_runs row, so a silent pipeline shows up as stale data. So far: 105 runs, 0 failed or partial.
+> 4. Monitor: Sodabase watches stations, station_status, status_snapshots and rejected_records through its read-only role. Nothing is deleted or truncated, and schema changes only through migrations.
+> 5. Gate: before each answer, the ask function combines pipeline health with Sodabase's verdict over MCP (check_trust, then data_trust while monitors warm up). Untrusted data gets a refusal with reasons and no model call.
+
+**Did you connect your project to Sodabase?**
+
+> Yes. Project spoke-nyc (ref dfytpxbxwwhktylpucwy).
+
+**What is the name of your Sodabase Workspace?**
+
+> *(copy it from the Sodabase dashboard)*
 
 ---
 
@@ -96,7 +151,7 @@ Images, in order: `linkedin-cover.png`, `linkedin-numbers.png`, `linkedin-health
 >
 > So Spoke checks before it trusts:
 > 🔁 every minute, a Supabase cron job pulls the feed through an edge function
-> 🧾 every record passes a 10-rule data contract; the ones that fail are quarantined with a reason
+> 🧾 every record passes a 12-rule data contract; the ones that fail are quarantined with a reason
 > 📒 every run, even a failed one, is audited, so a silent pipeline shows up as stale data
 > 🛡️ before Spoke answers "where can I get an e-bike?", it checks the data's health and asks Sodabase whether the table can be trusted. If not, it says "I won't guess" instead of sending you to an empty dock
 >
@@ -120,7 +175,7 @@ Images: `linkedin-cover.png`, `linkedin-health.png`. Post from Harshita's accoun
 > 🛠️ We built Spoke: live Citi Bike availability, checked before it's trusted.
 >
 > 🔁 pg_cron + an edge function load ~2,500 stations every minute
-> 🧾 a 10-rule data contract quarantines what's wrong (yes, 48 stations claim to have last reported in 1970)
+> 🧾 a 12-rule data contract quarantines what's wrong (yes, 48 stations claim to have last reported in 1970)
 > 🧱 Postgres CHECK constraints block bad values a second time
 > 👀 Sodabase learns how the tables normally change and watches for stale, empty or wrong data
 > 🛡️ the AI answer asks Sodabase first, and refuses to guess when the data can't be trusted

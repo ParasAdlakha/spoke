@@ -37,7 +37,7 @@ Built by **Paras Adlakha** and **Harshita Adlakha** for the **Supabase + Sodabas
 | Cron jobs | 3 `pg_cron` jobs: live status every minute, stations hourly, history every 10 minutes ([migration](supabase/migrations/20261104000003_spoke_cron.sql)) |
 | Edge functions | `ingest` (called by pg_cron via `pg_net`) and `ask` (the trust-gated answer) ([`supabase/functions`](supabase/functions)) |
 | Connect Sodabase | Read-only connection to the project; Sodabase's MCP `check_trust` is called on every answer when a token is set ([`sodabase.ts`](supabase/functions/_shared/sodabase.ts)) |
-| Data that isn't stale | Every watched table has a timestamp that moves on a fixed rhythm; a failed run still writes a row, so silence is visible |
+| Data that isn't stale | Every table has a timestamp that Sodabase can read; the live and history tables move on a steady rhythm, and a failed run still writes a row, so silence is visible |
 | Data that isn't empty | No truncation or deletion anywhere; history is insert-only |
 | Data that isn't wrong | Every record passes a written contract before it's saved; failures are quarantined with a reason |
 
@@ -60,7 +60,7 @@ Bike-share availability is the classic "the data said so" failure.
 ```mermaid
 flowchart LR
     G["Citi Bike GBFS<br/>public feed, ttl 60 s"] -->|"pg_cron, every minute"| I["ingest<br/>edge function"]
-    I --> V{"data contract<br/>10 rules"}
+    I --> V{"data contract<br/>12 rules"}
     V -- pass --> T[("station_status<br/>system_pulse")]
     V -- fail --> Q[("rejected_records<br/>quarantine")]
     T -->|"every 10 min"| H[("status_snapshots<br/>history")]
@@ -149,7 +149,7 @@ flowchart TB
     ASK -->|"Bearer token"| SODA
     ASK --> LLM
     ASK --> AA
-    SODA -.->|"watches"| SS & SN & SP & IR
+    SODA -.->|"watches"| ST & SS & SN & RR
 ```
 
 **Why so little code?** Spoke is a database with two small functions on top. The cron schedule, the secret store, the HTTP client, the history, the access rules and the read API are all Supabase. The only application logic is the contract and the trust gate, and both are pure TypeScript shared between the Deno functions and the Node tests.
@@ -175,7 +175,7 @@ sequenceDiagram
     I->>DB: station_capacities()
     I->>G: GET station_status.json
     G-->>I: 2,518 records, feed ~60-90 s old
-    Note over I: validate.ts: 10 rules → 2,461 clean, 57 rejected
+    Note over I: validate.ts: 12 rules → 2,461 clean, 57 rejected
     I->>DB: apply_status(rows, rejects, run) in one transaction
     Note over DB: station_status (~1,800 changed) · rejected_records · ingest_runs · system_pulse
     S-->>DB: read-only role watches freshness and volume
@@ -232,11 +232,11 @@ Every answer is logged in `ai_answers` with its verdict, the full trust record, 
 
 ## Built for Sodabase
 
-Sodabase learns how each table normally changes and flags data that's stale, empty or wrong. Spoke is designed so that "normal" is easy to learn and a real problem is easy to see.
+Sodabase learns how each table normally changes and flags data that's stale, empty or wrong. Spoke is designed so that "normal" is easy to learn and a real problem is easy to see. Sodabase currently watches four tables: `stations`, `station_status`, `status_snapshots` and `rejected_records`. `ingest_runs`, `system_pulse` and `ai_answers` are not watched; Spoke's own trust gate reads `ingest_runs`.
 
 | Sodabase check | How Spoke's tables behave |
 |---|---|
-| **Stale** (freshness, from `updated_at` / `created_at`) | `ingest_runs`, `system_pulse`: one row per minute, `created_at`, insert-only. `status_snapshots`: ~2,450 rows every 10 min. `station_status.updated_at`: about 1,800 stations re-report every minute. A stopped cron shows up within minutes |
+| **Stale** (freshness, from `updated_at` / `created_at`) | `station_status.updated_at`: about 1,800 stations re-report every minute. `status_snapshots`: ~2,450 rows every 10 min, `created_at`, insert-only. A stopped cron shows up within minutes |
 | **Empty** (row count drops, truncation) | Nothing is ever deleted or truncated. History tables only grow; `stations` and `station_status` hold ~2,500 rows, upserted in place |
 | **Wrong** (schema / shape) | The schema lives only in migrations; nothing alters tables at runtime. Bad values are blocked by the contract and `CHECK` constraints, and recorded in `rejected_records` |
 
@@ -261,7 +261,7 @@ claude mcp add --transport http sodabase https://sodabase.io/mcp
 
 ## Guardrails
 
-- **Bad data never reaches the live tables.** Ten contract rules in TypeScript, repeated as Postgres `CHECK` constraints for the critical ones.
+- **Bad data never reaches the live tables.** Twelve rejection reasons in TypeScript, repeated as Postgres `CHECK` constraints for the critical ones.
 - **A failed run is never silent.** Every run writes one `ingest_runs` row, success or failure; no runs in 15 minutes makes the data untrusted.
 - **The model only phrases facts.** It gets a facts block built from SQL and must cite stations as [n]; it is told never to invent numbers. With no key, or if the model call fails, a fixed template answers from the same facts.
 - **No model call on untrusted data.** The refusal is generated in code, with the reasons.
@@ -309,7 +309,7 @@ From the deployed project (`spoke-nyc`, us-east-1) on 4 November 2026:
 npm test
 ```
 
-15 tests, run with Node's built-in test runner on the same TypeScript files the edge functions import:
+22 tests, run with Node's built-in test runner on the same TypeScript files the edge functions import:
 
 | File | Covers |
 |---|---|
@@ -366,7 +366,7 @@ docs/
 data/README.md                          source, licence, contract, feed profile
 scripts/                                setup (Vault + first ingest), sql runner
   media/                                screen recording, slides, deck, videos (not needed to run Spoke)
-test/                                   15 unit tests
+test/                                   22 unit tests
 ```
 
 ---

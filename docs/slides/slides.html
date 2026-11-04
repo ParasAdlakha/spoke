@@ -92,7 +92,7 @@
     <span class="arrow">→</span>
     <div class="node sb"><b>pg_cron + pg_net</b>every minute<br>secret from Vault</div>
     <span class="arrow">→</span>
-    <div class="node sb"><b>ingest</b>edge function<br>10-rule contract</div>
+    <div class="node sb"><b>ingest</b>edge function<br>12-rule contract</div>
     <span class="arrow">→</span>
     <div class="node sb"><b>Postgres</b>7 tables · CHECKs<br>RLS · one transaction</div>
     <span class="arrow">→</span>
@@ -151,7 +151,7 @@
   <span class="kicker">Built for Sodabase</span>
   <h2>Designed so "normal" is easy to learn, and a problem is easy to see.</h2>
   <div class="grid3">
-    <div class="card"><span class="pill p-ok">STALE</span><h3>A heartbeat every minute</h3><p><code>ingest_runs</code> and <code>system_pulse</code> insert one row a minute; ~1,800 stations re-report in <code>station_status</code>. A stopped cron shows within minutes.</p></div>
+    <div class="card"><span class="pill p-ok">STALE</span><h3>A heartbeat every minute</h3><p>~1,800 stations re-report in <code>station_status</code> every minute, and <code>status_snapshots</code> adds ~2,450 rows every 10. A stopped cron shows within minutes.</p></div>
     <div class="card"><span class="pill p-ok">EMPTY</span><h3>Nothing is ever deleted</h3><p>History is insert-only; live tables are upserted in place. No truncation, so a row-count drop is always a real problem.</p></div>
     <div class="card"><span class="pill p-ok">WRONG</span><h3>Contract + constraints</h3><p>Schema only changes through migrations. Bad values are blocked twice: in TypeScript, then by Postgres.</p></div>
   </div>
@@ -178,7 +178,7 @@
   <div style="display:flex;align-items:center;gap:18px"><div class="logo" style="width:56px;height:56px;border-width:6px"></div><span class="kicker" style="font-size:18px">Supabase + Sodabase NYC Hackathon</span></div>
   <h1 style="font-size:96px;margin-top:40px">Spoke</h1>
   <h2 style="font-size:40px;font-weight:600;max-width:600px">Live Citi Bike, checked before it's trusted.</h2>
-  <p style="font-size:22px;color:var(--muted);margin-top:22px;max-width:560px;line-height:1.45">pg_cron + edge functions on Supabase · a 10-rule data contract · Sodabase-gated AI answers</p>
+  <p style="font-size:22px;color:var(--muted);margin-top:22px;max-width:560px;line-height:1.45">pg_cron + edge functions on Supabase · a 12-rule data contract · Sodabase-gated AI answers</p>
   <img src="../img/answer.png" class="shot" style="position:absolute;right:-90px;bottom:-40px;width:640px;transform:rotate(-3deg)">
 </section>
 

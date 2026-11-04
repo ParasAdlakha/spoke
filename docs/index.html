@@ -6,7 +6,7 @@
 <title>Spoke — live Citi Bike, checked before it's trusted</title>
 <meta name="description" content="Spoke pulls the Citi Bike feed into Supabase every minute, quarantines bad rows, and gates every AI answer on data trust from Sodabase. Supabase + Sodabase NYC Hackathon.">
 <meta property="og:title" content="Spoke — live Citi Bike, checked before it's trusted">
-<meta property="og:description" content="pg_cron + edge functions on Supabase, a 10-rule data contract, and Sodabase-gated AI answers.">
+<meta property="og:description" content="pg_cron + edge functions on Supabase, a 12-rule data contract, and Sodabase-gated AI answers.">
 <meta property="og:image" content="https://parasadlakha.github.io/spoke/img/linkedin-cover.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -137,7 +137,7 @@
     <div class="graph" id="graph">
       <div class="node" style="left:0;top:20px"><header>source</header><div><b>Citi Bike GBFS</b>public · ttl 60 s<br>2,518 stations</div></div>
       <div class="node hot" style="left:0;top:220px"><header>pg_cron + pg_net</header><div><b>every minute</b>secret from Vault<br>3 jobs</div></div>
-      <div class="node" style="left:26%;top:120px"><header>edge function</header><div><b>ingest</b>10-rule contract<br>one transaction</div></div>
+      <div class="node" style="left:26%;top:120px"><header>edge function</header><div><b>ingest</b>12-rule contract<br>one transaction</div></div>
       <div class="node" style="left:52%;top:20px"><header>postgres · rls</header><div><b>live tables</b>station_status<br>system_pulse · ingest_runs</div></div>
       <div class="node" style="left:52%;top:220px"><header>quarantine</header><div><b>rejected_records</b>one row per station<br>and reason</div></div>
       <div class="node soda" style="right:0;top:20px"><header>sodabase</header><div><b>watches</b>stale · empty · wrong<br>read-only role</div></div>
@@ -155,7 +155,7 @@
     <div class="label">03 · The data contract</div>
     <h2>Bad rows never reach the live tables.</h2>
     <div class="grid2">
-      <div class="win"><header><span>validate.ts</span><span>tested · 15/15</span></header>
+      <div class="win"><header><span>validate.ts</span><span>tested · 22/22</span></header>
         <table>
           <tr><th>rule</th><th>rejects</th></tr>
           <tr><td>bogus_timestamp</td><td>reported before Citi Bike existed (May 2013)</td></tr>
@@ -178,7 +178,7 @@
     <div class="label">04 · Built for Sodabase</div>
     <h2>"Normal" is easy to learn. A problem is easy to see.</h2>
     <div class="grid3">
-      <div class="win card"><span class="pill p-ok">STALE</span><h3>A heartbeat every minute</h3><p><code>ingest_runs</code> and <code>system_pulse</code> insert one row a minute; ~1,800 stations re-report in <code>station_status</code>. A stopped cron shows within minutes.</p></div>
+      <div class="win card"><span class="pill p-ok">STALE</span><h3>A heartbeat every minute</h3><p>~1,800 stations re-report in <code>station_status</code> every minute, and <code>status_snapshots</code> adds ~2,450 rows every 10. A stopped cron shows within minutes.</p></div>
       <div class="win card"><span class="pill p-ok">EMPTY</span><h3>Nothing is ever deleted</h3><p>History is insert-only; live tables are upserted in place. A row-count drop is always a real problem.</p></div>
       <div class="win card"><span class="pill p-ok">WRONG</span><h3>Contract + constraints</h3><p>Schema changes only through migrations. Bad values are blocked twice: in TypeScript, then in Postgres.</p></div>
     </div>

@@ -43,7 +43,7 @@ const steps = cut === '3min'
       { slide: S(1), say: 'Hi, we are Paras and Harshita. This is Spoke: live Citi Bike availability for New York, checked before it is trusted. Built on Supabase tables, cron jobs and edge functions, and watched by Sodabase.' },
       { slide: S(2), say: 'The app says three bikes, you walk ten minutes, and the dock is empty. We profiled one pull of the Citi Bike feed: forty eight stations report a last update in 1970, nine report more bikes than docks, and five installed stations have been silent for a day.' },
       ...demo,
-      { slide: S(4), say: 'It is a database with two small functions on top: three pg_cron jobs, pg_net, Vault, a ten rule contract, row level security, and one transaction per minute.' },
+      { slide: S(4), say: 'It is a database with two small functions on top: three pg_cron jobs, pg_net, Vault, a twelve rule contract, row level security, and one transaction per minute.' },
       { slide: S(6), say: 'And it is built for Sodabase. A heartbeat every minute, nothing ever deleted, schema only through migrations. Every answer calls Sodabase check trust, and if Sodabase says untrusted, Spoke will not answer.' },
       { slide: S(7), say: 'Spoke. Live Citi Bike, checked before it is trusted. Thank you.', min: 5 },
     ]
