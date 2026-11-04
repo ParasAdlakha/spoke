@@ -1,0 +1,18 @@
+{
+  "name": "spoke",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live NYC Citi Bike availability on Supabase, with a data contract and an AI answer that refuses to guess on untrusted data.",
+  "type": "module",
+  "engines": { "node": ">=22.6" },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "setup": "node scripts/setup.mjs",
+    "sql": "node scripts/sql.mjs",
+    "serve": "npx --yes serve docs -l 8800"
+  },
+  "devDependencies": {
+    "pg": "^8.13.0"
+  },
+  "license": "MIT"
+}

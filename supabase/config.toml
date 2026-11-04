@@ -1,0 +1,9 @@
+# Only the settings Spoke relies on. Both functions do their own auth:
+# `ingest` checks the pg_cron shared secret, `ask` is public (read-only data).
+project_id = "spoke"
+
+[functions.ingest]
+verify_jwt = false
+
+[functions.ask]
+verify_jwt = false
